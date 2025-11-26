@@ -1,0 +1,81 @@
+name: 'Synchronize Symitar Directory'
+description: 'GitHub Action to synchronize a directory on the Jack Henry™ credit union core platform'
+author: 'libum-llc'
+
+branding:
+  icon: 'refresh-cw'
+  color: 'blue'
+
+inputs:
+  directory-type:
+    description: 'The type of Symitar directory to synchronize (powerOns, letterFiles, dataFiles, helpFiles)'
+    required: true
+    default: 'powerOns'
+  local-directory-path:
+    description: 'The local directory path containing files to synchronize. If not specified, defaults to the standard path for the selected directory type (e.g., REPWRITERSPECS/ for PowerOns)'
+    required: false
+  connection-type:
+    description: 'The connection method to use (https or ssh). HTTPS is faster.'
+    required: false
+    default: 'ssh'
+  sync-mode:
+    description: 'Synchronization mode: push (upload only), pull (download only), or mirror (exact sync - deletes extra files on Symitar)'
+    required: true
+  dry-run:
+    description: 'If true, shows proposed changes without applying them'
+    required: false
+    default: 'true'
+  symitar-hostname:
+    description: 'The Symitar server hostname or IP address'
+    required: true
+  symitar-app-port:
+    description: 'The SymAppServer port (typically 42 + symNumber, e.g., 42627). Required when connection-type is https.'
+    required: false
+  ssh-username:
+    description: 'The AIX SSH username for the Symitar host'
+    required: true
+  ssh-password:
+    description: 'The AIX SSH password for the Symitar host'
+    required: true
+  ssh-port:
+    description: 'The SSH port for the Symitar server (only used when connection-type is ssh)'
+    required: false
+    default: '22'
+  sym-number:
+    description: 'The Symitar SYM number (e.g., 627)'
+    required: true
+  symitar-user-number:
+    description: 'The Symitar Quest user number'
+    required: true
+  symitar-user-password:
+    description: 'The Symitar Quest user password'
+    required: true
+  api-key:
+    description: 'The PowerOn Pipelines API Key from the Libum Portal'
+    required: true
+  install-poweron-list:
+    description: 'Comma-separated list of PowerOn files to install after sync (only applies to powerOns directory type)'
+    required: false
+    default: ''
+  validate-ignore-list:
+    description: 'Comma-separated list of PowerOn files to skip validation for'
+    required: false
+    default: ''
+  debug:
+    description: 'Enable debug logging'
+    required: false
+    default: 'false'
+
+outputs:
+  files-deployed:
+    description: 'Number of files deployed (added/updated)'
+  files-deleted:
+    description: 'Number of files deleted'
+  files-installed:
+    description: 'Number of PowerOn files installed (only for powerOns directory type)'
+  files-uninstalled:
+    description: 'Number of PowerOn files uninstalled (only for powerOns directory type)'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
