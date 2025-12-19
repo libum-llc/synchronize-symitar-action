@@ -1,6 +1,6 @@
 {
   "name": "synchronize-symitar-action",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "GitHub Action to synchronize a directory on the Jack Henry™ credit union core platform",
   "main": "src/main.ts",
   "scripts": {
