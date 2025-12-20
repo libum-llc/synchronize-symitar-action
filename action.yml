@@ -1,4 +1,4 @@
-name: 'Synchronize Symitar Directory'
+name: 'Synchronize Symitar'
 description: 'GitHub Action to synchronize a directory on the Jack Henry™ credit union core platform'
 author: 'libum-llc'
 
