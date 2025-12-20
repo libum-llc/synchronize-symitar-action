@@ -67,7 +67,6 @@ export async function synchronizeToSymitar(config: SynchronizeConfig): Promise<S
   const { logPrefix } = config;
 
   // Validate API key first
-  core.info(`${logPrefix} Validating API key...`);
   await validateApiKey(config.apiKey);
 
   // Get directory configuration
@@ -144,12 +143,8 @@ async function synchronizeViaHTTPs(
     password: config.sshPassword,
   };
 
-  const client = new SymitarHTTPs(
-    baseUrl,
-    symitarConfig,
-    config.debug ? 'debug' : 'info',
-    sshConfig,
-  );
+  const logLevel = config.debug ? 'debug' : 'warn';
+  const client = new SymitarHTTPs(baseUrl, symitarConfig, logLevel, sshConfig);
 
   try {
     core.info(`${logPrefix} Starting synchronization${config.isDryRun ? ' (DRY RUN)' : ''}...`);
@@ -183,6 +178,7 @@ async function synchronizeViaSSH(
 
   core.info(`${logPrefix} Connecting to ${config.symitarHostname}:${config.sshPort} via SSH...`);
 
+  const logLevel = config.debug ? 'debug' : 'warn';
   const client = new SymitarSSH(
     {
       host: config.symitarHostname,
@@ -190,7 +186,7 @@ async function synchronizeViaSSH(
       username: config.sshUsername,
       password: config.sshPassword,
     },
-    config.debug ? 'debug' : 'info',
+    logLevel,
   );
 
   try {

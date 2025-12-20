@@ -86256,7 +86256,6 @@ function getSyncMode(mode) {
 async function synchronizeToSymitar(config) {
     const { logPrefix } = config;
     // Validate API key first
-    core.info(`${logPrefix} Validating API key...`);
     await (0, subscription_1.validateApiKey)(config.apiKey);
     // Get directory configuration
     const directoryConfig = (0, directory_config_1.getDirectoryConfig)(config.directoryType);
@@ -86304,7 +86303,8 @@ async function synchronizeViaHTTPs(config, symitarDirectory, syncMode, installLi
         username: config.sshUsername,
         password: config.sshPassword,
     };
-    const client = new symitar_1.SymitarHTTPs(baseUrl, symitarConfig, config.debug ? 'debug' : 'info', sshConfig);
+    const logLevel = config.debug ? 'debug' : 'warn';
+    const client = new symitar_1.SymitarHTTPs(baseUrl, symitarConfig, logLevel, sshConfig);
     try {
         core.info(`${logPrefix} Starting synchronization${config.isDryRun ? ' (DRY RUN)' : ''}...`);
         const result = await client.synchronizeFiles(config.localDirectoryPath, installList, config.isDryRun, symitarDirectory, syncMode, config.validateIgnoreList);
@@ -86321,12 +86321,13 @@ async function synchronizeViaHTTPs(config, symitarDirectory, syncMode, installLi
 async function synchronizeViaSSH(config, symitarDirectory, syncMode, installList) {
     const { logPrefix } = config;
     core.info(`${logPrefix} Connecting to ${config.symitarHostname}:${config.sshPort} via SSH...`);
+    const logLevel = config.debug ? 'debug' : 'warn';
     const client = new symitar_1.SymitarSSH({
         host: config.symitarHostname,
         port: config.sshPort,
         username: config.sshUsername,
         password: config.sshPassword,
-    }, config.debug ? 'debug' : 'info');
+    }, logLevel);
     try {
         await client.isReady;
         core.info(`${logPrefix} Connected successfully`);
@@ -93547,7 +93548,7 @@ module.exports = {"version":"3.18.3"};
 /***/ ((module) => {
 
 "use strict";
-module.exports = /*#__PURE__*/JSON.parse('{"name":"synchronize-symitar-action","version":"1.0.4","description":"GitHub Action to synchronize a directory on the Jack Henry™ credit union core platform","main":"src/main.ts","scripts":{"build":"ncc build src/main.ts -o dist --source-map --license licenses.txt && rm -f dist/*.d.ts dist/*.d.ts.map dist/pagent.exe && rm -rf dist/build dist/lib","test":"jest --coverage","lint":"eslint --cache --quiet && prettier --check \'src/**/*.ts\' \'__tests__/**/*.ts\'","lint:fix":"eslint --cache --quiet --fix && prettier --write \'src/**/*.ts\' \'__tests__/**/*.ts\'","all":"pnpm lint:fix && pnpm build && pnpm test"},"repository":{"type":"git","url":"git+https://github.com/libum-llc/synchronize-symitar-action.git"},"keywords":["poweron","jack henry","symitar","episys","rsync","synchronize","github-action"],"author":"Libum, LLC","license":"MIT","dependencies":{"@actions/core":"^1.10.1","@actions/exec":"^1.1.1","@actions/github":"^6.0.0","@libum-llc/symitar":"0.8.1"},"devDependencies":{"@types/jest":"^29.5.12","@types/node":"^20.11.0","@typescript-eslint/eslint-plugin":"^6.19.0","@typescript-eslint/parser":"^6.19.0","@vercel/ncc":"^0.38.1","eslint":"^8.56.0","eslint-plugin-github":"^4.10.1","jest":"^29.7.0","prettier":"^3.2.4","ts-jest":"^29.1.2","ts-node":"^10.9.2","typescript":"^5.3.3"}}');
+module.exports = /*#__PURE__*/JSON.parse('{"name":"synchronize-symitar-action","version":"1.0.5","description":"GitHub Action to synchronize a directory on the Jack Henry™ credit union core platform","main":"src/main.ts","scripts":{"build":"ncc build src/main.ts -o dist --source-map --license licenses.txt && rm -f dist/*.d.ts dist/*.d.ts.map dist/pagent.exe && rm -rf dist/build dist/lib","test":"jest --coverage","lint":"eslint --cache --quiet && prettier --check \'src/**/*.ts\' \'__tests__/**/*.ts\'","lint:fix":"eslint --cache --quiet --fix && prettier --write \'src/**/*.ts\' \'__tests__/**/*.ts\'","all":"pnpm lint:fix && pnpm build && pnpm test"},"repository":{"type":"git","url":"git+https://github.com/libum-llc/synchronize-symitar-action.git"},"keywords":["poweron","jack henry","symitar","episys","rsync","synchronize","github-action"],"author":"Libum, LLC","license":"MIT","dependencies":{"@actions/core":"^1.10.1","@actions/exec":"^1.1.1","@actions/github":"^6.0.0","@libum-llc/symitar":"0.8.1"},"devDependencies":{"@types/jest":"^29.5.12","@types/node":"^20.11.0","@typescript-eslint/eslint-plugin":"^6.19.0","@typescript-eslint/parser":"^6.19.0","@vercel/ncc":"^0.38.1","eslint":"^8.56.0","eslint-plugin-github":"^4.10.1","jest":"^29.7.0","prettier":"^3.2.4","ts-jest":"^29.1.2","ts-node":"^10.9.2","typescript":"^5.3.3"}}');
 
 /***/ })
 

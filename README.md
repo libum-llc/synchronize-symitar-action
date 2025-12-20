@@ -36,7 +36,7 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -44,6 +44,7 @@ jobs:
       - name: Synchronize PowerOns to Symitar
         uses: libum-llc/synchronize-symitar-action@v1
         with:
+          directory-type: powerOns
           symitar-hostname: 93.455.43.232
           sym-number: 627
           symitar-user-number: 1995
@@ -59,38 +60,47 @@ jobs:
 ### Using HTTPS Connection
 
 ```yaml
-- name: Synchronize PowerOns via HTTPS
-  uses: libum-llc/synchronize-symitar-action@v1
-  with:
-    symitar-hostname: 93.455.43.232
-    symitar-app-port: 42627
-    sym-number: 627
-    symitar-user-number: 1995
-    symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
-    ssh-username: libum
-    ssh-password: ${{ secrets.SSH_PASSWORD }}
-    api-key: ${{ secrets.API_KEY }}
-    connection-type: https
-    sync-mode: push
-    dry-run: false
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Synchronize PowerOns via HTTPS
+        uses: libum-llc/synchronize-symitar-action@v1
+        with:
+          directory-type: powerOns
+          symitar-hostname: 93.455.43.232
+          symitar-app-port: 42627
+          sym-number: 627
+          symitar-user-number: 1995
+          symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
+          ssh-username: libum
+          ssh-password: ${{ secrets.SSH_PASSWORD }}
+          api-key: ${{ secrets.API_KEY }}
+          connection-type: https
+          sync-mode: push
+          dry-run: false
 ```
 
 ### Synchronizing Other Directory Types
 
 ```yaml
-- name: Synchronize LetterFiles
-  uses: libum-llc/synchronize-symitar-action@v1
-  with:
-    directory-type: letterFiles
-    symitar-hostname: 93.455.43.232
-    sym-number: 627
-    symitar-user-number: 1995
-    symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
-    ssh-username: libum
-    ssh-password: ${{ secrets.SSH_PASSWORD }}
-    api-key: ${{ secrets.API_KEY }}
-    sync-mode: push
-    dry-run: false
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Synchronize LetterFiles
+        uses: libum-llc/synchronize-symitar-action@v1
+        with:
+          directory-type: letterFiles
+          symitar-hostname: 93.455.43.232
+          sym-number: 627
+          symitar-user-number: 1995
+          symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
+          ssh-username: libum
+          ssh-password: ${{ secrets.SSH_PASSWORD }}
+          api-key: ${{ secrets.API_KEY }}
+          sync-mode: push
+          dry-run: false
 ```
 
 ### Using Mirror Mode
@@ -98,18 +108,23 @@ jobs:
 Mirror mode makes Symitar match your local directory exactly, deleting any extra files on Symitar:
 
 ```yaml
-- name: Mirror PowerOns to Symitar
-  uses: libum-llc/synchronize-symitar-action@v1
-  with:
-    symitar-hostname: 93.455.43.232
-    sym-number: 627
-    symitar-user-number: 1995
-    symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
-    ssh-username: libum
-    ssh-password: ${{ secrets.SSH_PASSWORD }}
-    api-key: ${{ secrets.API_KEY }}
-    sync-mode: mirror
-    dry-run: false
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Mirror PowerOns to Symitar
+        uses: libum-llc/synchronize-symitar-action@v1
+        with:
+          directory-type: powerOns
+          symitar-hostname: 93.455.43.232
+          sym-number: 627
+          symitar-user-number: 1995
+          symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
+          ssh-username: libum
+          ssh-password: ${{ secrets.SSH_PASSWORD }}
+          api-key: ${{ secrets.API_KEY }}
+          sync-mode: mirror
+          dry-run: false
 ```
 
 ## Customizing
@@ -118,6 +133,7 @@ Mirror mode makes Symitar match your local directory exactly, deleting any extra
 
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
+| `directory-type` | Type of Symitar directory: `powerOns`, `letterFiles`, `dataFiles`, `helpFiles` | Yes | - |
 | `symitar-hostname` | The endpoint by which you connect to the Symitar host | Yes | - |
 | `sym-number` | The directory (aka Sym) number for your connection | Yes | - |
 | `symitar-user-number` | Your Symitar Quest user number (just the number) | Yes | - |
@@ -128,8 +144,7 @@ Mirror mode makes Symitar match your local directory exactly, deleting any extra
 | `api-key` | Your PowerOn Pipelines API Key from [Libum Portal](https://portal.libum.io) | Yes | - |
 | `symitar-app-port` | The port which your SymAppServer communicates over. This is typically `42` + `symNumber` | No | - |
 | `connection-type` | Connection type: `https` or `ssh` | No | `ssh` |
-| `directory-type` | Type of Symitar directory: `powerOns`, `letterFiles`, `dataFiles`, `helpFiles` | No | `powerOns` |
-| `local-directory-path` | Local directory path containing files to synchronize | No | Per type |
+| `local-directory-path` | Local directory path containing files to synchronize | No | `REPWRITERSPECS/` (powerOns), `LETTERSPECS/` (letterFiles), `DATAFILES/` (dataFiles), `HELPFILES/` (helpFiles) |
 | `sync-mode` | Synchronization mode: `push` (upload), `pull` (download), or `mirror` (exact sync) | Yes | - |
 | `dry-run` | If `true`, shows proposed changes without applying them | No | `true` |
 | `install-poweron-list` | Comma-separated list of PowerOn files to install after sync (only for `powerOns`) | No | `''` |

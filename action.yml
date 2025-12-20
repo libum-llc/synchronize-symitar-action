@@ -10,7 +10,6 @@ inputs:
   directory-type:
     description: 'The type of Symitar directory to synchronize (powerOns, letterFiles, dataFiles, helpFiles)'
     required: true
-    default: 'powerOns'
   local-directory-path:
     description: 'The local directory path containing files to synchronize. If not specified, defaults to the standard path for the selected directory type (e.g., REPWRITERSPECS/ for PowerOns)'
     required: false
