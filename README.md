@@ -5,6 +5,9 @@
 ## About
 GitHub Action to synchronize a directory on the Jack Henry™ credit union core platform
 
+![Synchronize Symitar Action](.github/synchronize-symitar.png)
+
+
 ___
 
 - [Usage](#usage)
