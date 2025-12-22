@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-GitHub Action to synchronize directories (PowerOns, LetterFiles, DataFiles, HelpFiles) on the Jack Henry Symitar credit union core platform. Supports both SSH and HTTPS connections with push, pull, and mirror sync modes.
+GitHub Action to synchronize directories (PowerOns, LetterFiles, DataFiles, HelpFiles) on the Jack Henry Symitar credit union core platform. Supports both SSH and HTTPS connections with push, pull, and mirror sync modes. File transfers can use SFTP (with configurable concurrency) or rsync.
 
 ## Commands
 
@@ -30,7 +30,7 @@ pnpm test -- __tests__/synchronize.test.ts
 - `src/directory-config.ts` - Directory type configuration mapping (powerOns→REPWRITERSPECS, letterFiles→LETTERSPECS, etc.)
 - `src/subscription.ts` - API key validation against Libum license server with retry logic
 
-**Key Dependency**: `@libum-llc/symitar` provides `SymitarHTTPs` and `SymitarSSH` clients for file synchronization.
+**Key Dependency**: `@libum-llc/symitar` (v0.9.1) provides `SymitarHTTPs` and `SymitarSSH` clients with `syncFiles()` method for file synchronization.
 
 **Client Log Levels**: Clients are initialized with `'warn'` log level by default, `'debug'` when debug input is enabled.
 

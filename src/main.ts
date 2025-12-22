@@ -1,5 +1,5 @@
 import * as core from '@actions/core';
-import { synchronizeToSymitar, ConnectionType, SyncMode } from './synchronize';
+import { synchronizeToSymitar, ConnectionType, SyncMode, SyncMethod } from './synchronize';
 import { version } from '../package.json';
 import { AuthenticationError, ConnectionError } from './subscription';
 import {
@@ -33,6 +33,8 @@ export async function run(): Promise<void> {
       core.getInput('install-poweron-list', { required: false }) || '';
     const validateIgnoreListInput =
       core.getInput('validate-ignore-list', { required: false }) || '';
+    const syncMethodInput = core.getInput('sync-method', { required: false }) || 'sftp';
+    const sftpConcurrencyInput = core.getInput('sftp-concurrency', { required: false }) || '4';
     const debug = core.getInput('debug', { required: false }) === 'true';
 
     // Mask sensitive information
@@ -56,6 +58,18 @@ export async function run(): Promise<void> {
     // Validate sync mode
     if (syncMode !== 'push' && syncMode !== 'pull' && syncMode !== 'mirror') {
       throw new Error(`Invalid sync mode: ${syncMode}. Must be 'push', 'pull', or 'mirror'`);
+    }
+
+    // Validate sync method
+    if (syncMethodInput !== 'sftp' && syncMethodInput !== 'rsync') {
+      throw new Error(`Invalid sync method: ${syncMethodInput}. Must be 'sftp' or 'rsync'`);
+    }
+    const syncMethod: SyncMethod = syncMethodInput;
+
+    // Validate and parse SFTP concurrency
+    const sftpConcurrency = parseInt(sftpConcurrencyInput, 10);
+    if (isNaN(sftpConcurrency) || sftpConcurrency < 1 || sftpConcurrency > 20) {
+      throw new Error(`Invalid SFTP concurrency: ${sftpConcurrencyInput}. Must be between 1-20`);
     }
 
     // Validate hostname format
@@ -114,6 +128,10 @@ export async function run(): Promise<void> {
     core.info(`${logPrefix} Directory Type: ${directoryConfig.name}`);
     core.info(`${logPrefix} Connection Type: ${connectionType.toUpperCase()}`);
     core.info(`${logPrefix} Sync Mode: ${syncMode}`);
+    core.info(`${logPrefix} Sync Method: ${syncMethod.toUpperCase()}`);
+    if (syncMethod === 'sftp') {
+      core.info(`${logPrefix} SFTP Concurrency: ${sftpConcurrency}`);
+    }
     core.info(`${logPrefix} Hostname: ${symitarHostname}`);
     if (connectionType === 'https') {
       core.info(`${logPrefix} Symitar App Port: ${symitarAppPort}`);
@@ -150,6 +168,8 @@ export async function run(): Promise<void> {
       directoryType,
       connectionType,
       syncMode,
+      syncMethod,
+      sftpConcurrency,
       isDryRun,
       installPowerOnList,
       validateIgnoreList,

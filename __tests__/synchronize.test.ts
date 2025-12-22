@@ -7,18 +7,18 @@ jest.mock('@actions/core');
 // Mock @libum-llc/symitar
 const mockSSHEnd = jest.fn().mockResolvedValue(undefined);
 const mockHTTPsEnd = jest.fn().mockResolvedValue(undefined);
-const mockSSHSynchronizeFiles = jest.fn();
-const mockHTTPsSynchronizeFiles = jest.fn();
+const mockSSHSyncFiles = jest.fn();
+const mockHTTPsSyncFiles = jest.fn();
 const mockIsReady = Promise.resolve();
 
 jest.mock('@libum-llc/symitar', () => ({
   SymitarSSH: jest.fn().mockImplementation(() => ({
     isReady: mockIsReady,
-    synchronizeFiles: mockSSHSynchronizeFiles,
+    syncFiles: mockSSHSyncFiles,
     end: mockSSHEnd,
   })),
   SymitarHTTPs: jest.fn().mockImplementation(() => ({
-    synchronizeFiles: mockHTTPsSynchronizeFiles,
+    syncFiles: mockHTTPsSyncFiles,
     end: mockHTTPsEnd,
   })),
   SymitarSyncDirectory: {
@@ -31,6 +31,10 @@ jest.mock('@libum-llc/symitar', () => ({
     PUSH: 'push',
     PULL: 'pull',
     MIRROR: 'mirror',
+  },
+  SymitarSyncTransport: {
+    SFTP: 'sftp',
+    RSYNC: 'rsync',
   },
 }));
 
@@ -74,6 +78,8 @@ describe('synchronize', () => {
     directoryType: 'powerOns',
     connectionType: 'ssh',
     syncMode: 'push',
+    syncMethod: 'sftp',
+    sftpConcurrency: 4,
     isDryRun: false,
     installPowerOnList: ['FILE1.PO'],
     validateIgnoreList: [],
@@ -82,16 +88,18 @@ describe('synchronize', () => {
   };
 
   const defaultSyncResult = {
-    deployed: ['FILE1.PO', 'FILE2.PO'],
+    synced: ['FILE1.PO', 'FILE2.PO'],
     deleted: ['OLD.PO'],
+    skipped: [],
+    errors: [],
     installed: ['FILE1.PO'],
     uninstalled: [],
   };
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockSSHSynchronizeFiles.mockResolvedValue(defaultSyncResult);
-    mockHTTPsSynchronizeFiles.mockResolvedValue(defaultSyncResult);
+    mockSSHSyncFiles.mockResolvedValue(defaultSyncResult);
+    mockHTTPsSyncFiles.mockResolvedValue(defaultSyncResult);
   });
 
   describe('SSH connection', () => {
@@ -121,45 +129,83 @@ describe('synchronize', () => {
       expect(MockedSymitarSSH).toHaveBeenCalledWith(expect.anything(), 'debug');
     });
 
-    it('should call synchronizeFiles with correct parameters', async () => {
+    it('should call syncFiles with correct parameters', async () => {
       await synchronizeToSymitar(defaultConfig);
 
-      expect(mockSSHSynchronizeFiles).toHaveBeenCalledWith(
+      expect(mockSSHSyncFiles).toHaveBeenCalledWith(
         { symNumber: 627, symitarUserNumber: '1', symitarUserPassword: 'questpass' },
         './powerons/',
-        ['FILE1.PO'],
-        false,
         'REPWRITERSPECS',
         'push',
-        [],
+        {
+          transport: 'sftp',
+          concurrency: 4,
+          powerOn: {
+            installList: ['FILE1.PO'],
+            validateIgnoreList: [],
+          },
+        },
+        false,
       );
     });
 
-    it('should pass isDryRun to synchronizeFiles', async () => {
+    it('should pass isDryRun to syncFiles', async () => {
       await synchronizeToSymitar({ ...defaultConfig, isDryRun: true });
 
-      expect(mockSSHSynchronizeFiles).toHaveBeenCalledWith(
+      expect(mockSSHSyncFiles).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
         expect.anything(),
         expect.anything(),
         expect.anything(),
         true,
+      );
+    });
+
+    it('should pass validateIgnoreList to syncFiles', async () => {
+      await synchronizeToSymitar({ ...defaultConfig, validateIgnoreList: ['TEST.PO'] });
+
+      expect(mockSSHSyncFiles).toHaveBeenCalledWith(
         expect.anything(),
         expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({
+          powerOn: expect.objectContaining({
+            validateIgnoreList: ['TEST.PO'],
+          }),
+        }),
         expect.anything(),
       );
     });
 
-    it('should pass validateIgnoreList to synchronizeFiles', async () => {
-      await synchronizeToSymitar({ ...defaultConfig, validateIgnoreList: ['TEST.PO'] });
+    it('should pass syncMethod rsync correctly', async () => {
+      await synchronizeToSymitar({ ...defaultConfig, syncMethod: 'rsync' });
 
-      expect(mockSSHSynchronizeFiles).toHaveBeenCalledWith(
+      expect(mockSSHSyncFiles).toHaveBeenCalledWith(
         expect.anything(),
         expect.anything(),
         expect.anything(),
         expect.anything(),
+        expect.objectContaining({
+          transport: 'rsync',
+        }),
+        expect.anything(),
+      );
+    });
+
+    it('should pass sftpConcurrency correctly', async () => {
+      await synchronizeToSymitar({ ...defaultConfig, sftpConcurrency: 8 });
+
+      expect(mockSSHSyncFiles).toHaveBeenCalledWith(
         expect.anything(),
         expect.anything(),
-        ['TEST.PO'],
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({
+          concurrency: 8,
+        }),
+        expect.anything(),
       );
     });
 
@@ -170,7 +216,7 @@ describe('synchronize', () => {
     });
 
     it('should close connection even on error', async () => {
-      mockSSHSynchronizeFiles.mockRejectedValue(new Error('Sync failed'));
+      mockSSHSyncFiles.mockRejectedValue(new Error('Sync failed'));
 
       await expect(synchronizeToSymitar(defaultConfig)).rejects.toThrow('Sync failed');
       expect(mockSSHEnd).toHaveBeenCalled();
@@ -207,16 +253,22 @@ describe('synchronize', () => {
       );
     });
 
-    it('should call synchronizeFiles with correct parameters', async () => {
+    it('should call syncFiles with correct parameters', async () => {
       await synchronizeToSymitar(httpsConfig);
 
-      expect(mockHTTPsSynchronizeFiles).toHaveBeenCalledWith(
+      expect(mockHTTPsSyncFiles).toHaveBeenCalledWith(
         './powerons/',
-        ['FILE1.PO'],
-        false,
         'REPWRITERSPECS',
         'push',
-        [],
+        {
+          transport: 'sftp',
+          concurrency: 4,
+          powerOn: {
+            installList: ['FILE1.PO'],
+            validateIgnoreList: [],
+          },
+        },
+        false,
       );
     });
 
@@ -227,7 +279,7 @@ describe('synchronize', () => {
     });
 
     it('should close connection even on error', async () => {
-      mockHTTPsSynchronizeFiles.mockRejectedValue(new Error('Sync failed'));
+      mockHTTPsSyncFiles.mockRejectedValue(new Error('Sync failed'));
 
       await expect(synchronizeToSymitar(httpsConfig)).rejects.toThrow('Sync failed');
       expect(mockHTTPsEnd).toHaveBeenCalled();
@@ -251,9 +303,11 @@ describe('synchronize', () => {
     });
 
     it('should handle empty sync result', async () => {
-      mockSSHSynchronizeFiles.mockResolvedValue({
-        deployed: [],
+      mockSSHSyncFiles.mockResolvedValue({
+        synced: [],
         deleted: [],
+        skipped: [],
+        errors: [],
         installed: [],
         uninstalled: [],
       });

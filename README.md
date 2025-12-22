@@ -146,6 +146,8 @@ jobs:
 | `connection-type` | Connection type: `https` or `ssh` | No | `ssh` |
 | `local-directory-path` | Local directory path containing files to synchronize | No | `REPWRITERSPECS/` (powerOns), `LETTERSPECS/` (letterFiles), `DATAFILES/` (dataFiles), `HELPFILES/` (helpFiles) |
 | `sync-mode` | Synchronization mode: `push` (upload), `pull` (download), or `mirror` (exact sync) | Yes | - |
+| `sync-method` | Transport method for file synchronization: `sftp` or `rsync` | No | `sftp` |
+| `sftp-concurrency` | Number of concurrent SFTP transfers (1-20). Only applies when `sync-method` is `sftp` | No | `4` |
 | `dry-run` | If `true`, shows proposed changes without applying them | No | `true` |
 | `install-poweron-list` | Comma-separated list of PowerOn files to install after sync (only for `powerOns`) | No | `''` |
 | `validate-ignore-list` | Comma-separated list of PowerOn files to skip validation for | No | `''` |

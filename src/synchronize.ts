@@ -4,13 +4,16 @@ import {
   SymitarHTTPs,
   SymitarSyncDirectory,
   SymitarSyncMode,
-  SymitarSyncResponse,
+  SymitarSyncTransport,
+  SyncFilesOptions,
+  SyncFilesResult,
 } from '@libum-llc/symitar';
 import { validateApiKey } from './subscription';
 import { DirectoryType, getDirectoryConfig, getInstallList } from './directory-config';
 
 export type ConnectionType = 'https' | 'ssh';
 export type SyncMode = 'push' | 'pull' | 'mirror';
+export type SyncMethod = 'sftp' | 'rsync';
 
 export interface SynchronizeConfig {
   symitarHostname: string;
@@ -26,6 +29,8 @@ export interface SynchronizeConfig {
   directoryType: DirectoryType;
   connectionType: ConnectionType;
   syncMode: SyncMode;
+  syncMethod: SyncMethod;
+  sftpConcurrency: number;
   isDryRun: boolean;
   installPowerOnList: string[];
   validateIgnoreList: string[];
@@ -61,6 +66,20 @@ function getSyncMode(mode: SyncMode): SymitarSyncMode {
 }
 
 /**
+ * Maps our sync method string to the Symitar transport enum
+ */
+function getSyncTransport(method: SyncMethod): SymitarSyncTransport {
+  switch (method) {
+    case 'sftp':
+      return SymitarSyncTransport.SFTP;
+    case 'rsync':
+      return SymitarSyncTransport.RSYNC;
+    default:
+      throw new Error(`Invalid sync method: ${method}`);
+  }
+}
+
+/**
  * Synchronize files to a Symitar server using HTTPS or SSH.
  */
 export async function synchronizeToSymitar(config: SynchronizeConfig): Promise<SynchronizeResult> {
@@ -78,38 +97,55 @@ export async function synchronizeToSymitar(config: SynchronizeConfig): Promise<S
   // Get sync mode enum
   const syncMode = getSyncMode(config.syncMode);
 
+  // Get sync transport
+  const syncTransport = getSyncTransport(config.syncMethod);
+
+  // Build sync options
+  const syncOptions: SyncFilesOptions = {
+    transport: syncTransport,
+    concurrency: config.sftpConcurrency,
+    powerOn: {
+      installList,
+      validateIgnoreList: config.validateIgnoreList,
+    },
+  };
+
   core.info(`${logPrefix} Using ${config.connectionType.toUpperCase()} connection`);
+  core.info(`${logPrefix} Sync method: ${config.syncMethod.toUpperCase()}`);
+  if (config.syncMethod === 'sftp') {
+    core.info(`${logPrefix} SFTP concurrency: ${config.sftpConcurrency}`);
+  }
   core.info(
     `${logPrefix} Beginning ${config.syncMode} synchronization of ${directoryConfig.name} for Sym ${config.symNumber}${config.isDryRun ? ' (Dry Run)' : ''}`,
   );
 
-  let result: SymitarSyncResponse;
+  let result: SyncFilesResult;
 
   if (config.connectionType === 'https') {
     result = await synchronizeViaHTTPs(
       config,
       directoryConfig.symitarDirectory,
       syncMode,
-      installList,
+      syncOptions,
     );
   } else {
     result = await synchronizeViaSSH(
       config,
       directoryConfig.symitarDirectory,
       syncMode,
-      installList,
+      syncOptions,
     );
   }
 
   return {
-    filesDeployed: result.deployed.length,
+    filesDeployed: result.synced.length,
     filesDeleted: result.deleted.length,
-    filesInstalled: result.installed.length,
-    filesUninstalled: result.uninstalled.length,
-    deployedFiles: result.deployed,
+    filesInstalled: result.installed?.length ?? 0,
+    filesUninstalled: result.uninstalled?.length ?? 0,
+    deployedFiles: result.synced,
     deletedFiles: result.deleted,
-    installedFiles: result.installed,
-    uninstalledFiles: result.uninstalled,
+    installedFiles: result.installed ?? [],
+    uninstalledFiles: result.uninstalled ?? [],
   };
 }
 
@@ -120,8 +156,8 @@ async function synchronizeViaHTTPs(
   config: SynchronizeConfig,
   symitarDirectory: SymitarSyncDirectory,
   syncMode: SymitarSyncMode,
-  installList: string[],
-): Promise<SymitarSyncResponse> {
+  syncOptions: SyncFilesOptions,
+): Promise<SyncFilesResult> {
   const { logPrefix } = config;
 
   if (!config.symitarAppPort) {
@@ -149,13 +185,12 @@ async function synchronizeViaHTTPs(
   try {
     core.info(`${logPrefix} Starting synchronization${config.isDryRun ? ' (DRY RUN)' : ''}...`);
 
-    const result = await client.synchronizeFiles(
+    const result = await client.syncFiles(
       config.localDirectoryPath,
-      installList,
-      config.isDryRun,
       symitarDirectory,
       syncMode,
-      config.validateIgnoreList,
+      syncOptions,
+      config.isDryRun,
     );
 
     return result;
@@ -172,8 +207,8 @@ async function synchronizeViaSSH(
   config: SynchronizeConfig,
   symitarDirectory: SymitarSyncDirectory,
   syncMode: SymitarSyncMode,
-  installList: string[],
-): Promise<SymitarSyncResponse> {
+  syncOptions: SyncFilesOptions,
+): Promise<SyncFilesResult> {
   const { logPrefix } = config;
 
   core.info(`${logPrefix} Connecting to ${config.symitarHostname}:${config.sshPort} via SSH...`);
@@ -201,14 +236,13 @@ async function synchronizeViaSSH(
       symitarUserPassword: config.symitarUserPassword,
     };
 
-    const result = await client.synchronizeFiles(
+    const result = await client.syncFiles(
       symitarConfig,
       config.localDirectoryPath,
-      installList,
-      config.isDryRun,
       symitarDirectory,
       syncMode,
-      config.validateIgnoreList,
+      syncOptions,
+      config.isDryRun,
     );
 
     return result;

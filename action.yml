@@ -60,6 +60,14 @@ inputs:
     description: 'Comma-separated list of PowerOn files to skip validation for'
     required: false
     default: ''
+  sync-method:
+    description: 'The transport method for file synchronization: sftp (default) or rsync'
+    required: false
+    default: 'sftp'
+  sftp-concurrency:
+    description: 'Number of concurrent SFTP transfers (only applies when sync-method is sftp)'
+    required: false
+    default: '4'
   debug:
     description: 'Enable debug logging'
     required: false

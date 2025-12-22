@@ -4374,39 +4374,7 @@ module.exports = diagnostics;
 
 /***/ }),
 
-/***/ 78910:
-/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
-
-"use strict";
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getChangedFiles = void 0;
-const helpers_1 = __nccwpck_require__(83738);
-const types_1 = __nccwpck_require__(15754);
-const getChangedFiles = async (host, config, sshConfig, localDirectory, remoteDirectory, logger, logPrefix, syncMode = types_1.SymitarSyncMode.MIRROR) => {
-    try {
-        const changedFiles = await (0, helpers_1.executeRsync)({
-            host: host,
-            username: sshConfig.username,
-            password: sshConfig.password,
-            symNumber: config.symNumber,
-            localDirectory,
-            remoteDirectory,
-            syncMode,
-        }, true);
-        return changedFiles;
-    }
-    catch (error) {
-        logger.error(`${logPrefix} Unable to get changed files: ${error.message}`);
-        throw error;
-    }
-};
-exports.getChangedFiles = getChangedFiles;
-//# sourceMappingURL=https.changes.js.map
-
-/***/ }),
-
-/***/ 21036:
+/***/ 53467:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
@@ -4417,8 +4385,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.deployFile = void 0;
 const path_1 = __importDefault(__nccwpck_require__(16928));
-const helpers_1 = __nccwpck_require__(83738);
-const types_1 = __nccwpck_require__(15754);
+const helpers_1 = __nccwpck_require__(48321);
+const types_1 = __nccwpck_require__(54737);
 const appServerToFileType = {
     [types_1.SymitarAppServerFileType.POWERON]: types_1.SymitarFileType.POWERON,
     [types_1.SymitarAppServerFileType.DATAFILE]: types_1.SymitarFileType.DATAFILE,
@@ -4461,7 +4429,7 @@ exports.deployFile = deployFile;
 
 /***/ }),
 
-/***/ 30595:
+/***/ 74760:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
@@ -4474,7 +4442,7 @@ exports.downloadFile = void 0;
 const path_1 = __importDefault(__nccwpck_require__(16928));
 const fs_1 = __importDefault(__nccwpck_require__(79896));
 const os_1 = __importDefault(__nccwpck_require__(70857));
-const types_1 = __nccwpck_require__(15754);
+const types_1 = __nccwpck_require__(54737);
 const appServerToFileType = {
     [types_1.SymitarAppServerFileType.POWERON]: types_1.SymitarFileType.POWERON,
     [types_1.SymitarAppServerFileType.DATAFILE]: types_1.SymitarFileType.DATAFILE,
@@ -4528,14 +4496,14 @@ exports.downloadFile = downloadFile;
 
 /***/ }),
 
-/***/ 63184:
+/***/ 51301:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.executePowerOn = executePowerOn;
-const types_1 = __nccwpck_require__(15754);
+const types_1 = __nccwpck_require__(54737);
 async function executePowerOn(client, symNumber, symitarUserNumber, symitarUserPassword, powerOnName, options) {
     return executeWithTransaction(client, symNumber, symitarUserNumber, symitarUserPassword, powerOnName, undefined, undefined, options);
 }
@@ -4664,7 +4632,7 @@ function sleep(ms) {
 
 /***/ }),
 
-/***/ 54252:
+/***/ 30489:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
@@ -4675,8 +4643,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.installPowerOn = void 0;
 const path_1 = __importDefault(__nccwpck_require__(16928));
-const helpers_1 = __nccwpck_require__(83738);
-const types_1 = __nccwpck_require__(15754);
+const helpers_1 = __nccwpck_require__(48321);
+const types_1 = __nccwpck_require__(54737);
 const installPowerOn = async (client, localFilePath, logger, logPrefix) => {
     const body = await (0, helpers_1.convertFileToBinary)(localFilePath);
     const fileName = path_1.default.basename(localFilePath);
@@ -4702,7 +4670,7 @@ exports.installPowerOn = installPowerOn;
 
 /***/ }),
 
-/***/ 33053:
+/***/ 5616:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
@@ -4714,21 +4682,20 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.SymitarHTTPs = void 0;
 const https_1 = __importDefault(__nccwpck_require__(65692));
 const axios_1 = __importDefault(__nccwpck_require__(27455));
-const helpers_1 = __nccwpck_require__(83738);
-const logging_1 = __nccwpck_require__(82322);
-const ssh_1 = __nccwpck_require__(9625);
-const types_1 = __nccwpck_require__(15754);
-const https_deploy_1 = __nccwpck_require__(21036);
-const https_download_1 = __nccwpck_require__(30595);
-const https_install_1 = __nccwpck_require__(54252);
-const https_list_1 = __nccwpck_require__(26651);
-const https_remove_1 = __nccwpck_require__(67419);
-const https_synchronize_1 = __nccwpck_require__(36253);
-const https_validate_1 = __nccwpck_require__(17221);
-const https_uninstall_1 = __nccwpck_require__(99337);
-const https_changes_1 = __nccwpck_require__(78910);
-const https_execute_1 = __nccwpck_require__(63184);
-const https_reports_1 = __nccwpck_require__(99812);
+const helpers_1 = __nccwpck_require__(48321);
+const logging_1 = __nccwpck_require__(21613);
+const ssh_1 = __nccwpck_require__(44700);
+const types_1 = __nccwpck_require__(54737);
+const https_deploy_1 = __nccwpck_require__(53467);
+const https_download_1 = __nccwpck_require__(74760);
+const https_install_1 = __nccwpck_require__(30489);
+const https_list_1 = __nccwpck_require__(83892);
+const https_remove_1 = __nccwpck_require__(14496);
+const https_synchronize_1 = __nccwpck_require__(16012);
+const https_validate_1 = __nccwpck_require__(92722);
+const https_uninstall_1 = __nccwpck_require__(33360);
+const https_execute_1 = __nccwpck_require__(51301);
+const https_reports_1 = __nccwpck_require__(5281);
 https_1.default.globalAgent.options.rejectUnauthorized = false;
 const DEFAULT_REQUEST_TIMEOUT = 60000;
 class SymitarHTTPs {
@@ -4767,12 +4734,11 @@ class SymitarHTTPs {
             await this._sshClient.end();
         }
     }
-    async getChangedFiles(localDirectory, remoteDirectory = types_1.SymitarSyncDirectory.REPWRITERSPECS, syncMode = types_1.SymitarSyncMode.MIRROR) {
-        if (!this.sshConfig) {
+    async getChangedFiles(localDirectory, remoteDirectory = types_1.SymitarSyncDirectory.REPWRITERSPECS, syncMode = types_1.SymitarSyncMode.MIRROR, options = {}) {
+        if (!this._sshClient) {
             throw new Error('SSH configuration required for getChangedFiles');
         }
-        const logPrefix = `[GetChangedFiles]`;
-        return (0, https_changes_1.getChangedFiles)(this.host, this.config, this.sshConfig, localDirectory, remoteDirectory, this._logger, logPrefix, syncMode);
+        return this._sshClient.getChangedFiles(this.config, localDirectory, remoteDirectory, syncMode, options);
     }
     async deployFile(type, localFilePath, remoteFileName) {
         return (0, https_deploy_1.deployFile)(this._client, this._sshClient, this.config, type, localFilePath, remoteFileName, this._logger, this._logPrefix);
@@ -4792,8 +4758,20 @@ class SymitarHTTPs {
     async removeFile(type, fileName) {
         return (0, https_remove_1.removeFile)(this._sshClient, this.config, type, fileName, this._logger, this._logPrefix);
     }
-    async synchronizeFiles(localDirectory, installPowerOnList, isDryRun = true, remoteDirectory = types_1.SymitarSyncDirectory.REPWRITERSPECS, syncMode = types_1.SymitarSyncMode.MIRROR, validateIgnoreList = []) {
-        return (0, https_synchronize_1.synchronizeFiles)(this._client, this._sshClient, this.host, this.config, this.sshConfig, localDirectory, remoteDirectory, installPowerOnList, isDryRun, this._logger, this._logPrefix, syncMode, validateIgnoreList);
+    async syncFiles(localDirectory, remoteDirectory, syncMode, options, isDryRun = true) {
+        if (!this._sshClient) {
+            throw new Error('SSH configuration required for syncFiles');
+        }
+        return (0, https_synchronize_1.syncFiles)(this._client, this._sshClient, { host: this.host, ...this.sshConfig }, this.config, localDirectory, remoteDirectory, syncMode, isDryRun, this._logger, this._logPrefix, options);
+    }
+    async synchronizeFiles(localDirectory, installPowerOnList, isDryRun = true, remoteDirectory = types_1.SymitarSyncDirectory.REPWRITERSPECS, syncMode = types_1.SymitarSyncMode.MIRROR, validateIgnoreList = [], options = {}) {
+        return this.syncFiles(localDirectory, remoteDirectory, syncMode, {
+            ...options,
+            powerOn: {
+                installList: installPowerOnList,
+                validateIgnoreList,
+            },
+        }, isDryRun);
     }
     async validatePowerOn(localFilePath, options = {}) {
         return (0, https_validate_1.validatePowerOn)(this._client, this._sshClient, this.config, localFilePath, options, this._logger, this._logPrefix);
@@ -4828,15 +4806,15 @@ exports.SymitarHTTPs = SymitarHTTPs;
 
 /***/ }),
 
-/***/ 26651:
+/***/ 83892:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.listFiles = exports.listPowerOns = void 0;
-const types_1 = __nccwpck_require__(15754);
-const ssh_list_1 = __nccwpck_require__(30215);
+const types_1 = __nccwpck_require__(54737);
+const ssh_list_1 = __nccwpck_require__(84480);
 const listPowerOns = async (client) => {
     const response = await client.post('/root/invoke', null, {
         headers: {
@@ -4866,7 +4844,7 @@ exports.listFiles = listFiles;
 
 /***/ }),
 
-/***/ 67419:
+/***/ 14496:
 /***/ ((__unused_webpack_module, exports) => {
 
 "use strict";
@@ -4895,7 +4873,7 @@ exports.removeFile = removeFile;
 
 /***/ }),
 
-/***/ 99812:
+/***/ 5281:
 /***/ ((__unused_webpack_module, exports) => {
 
 "use strict";
@@ -4920,42 +4898,51 @@ async function waitForBatchSequences(sshClient, config, title, timeoutSeconds, l
 
 /***/ }),
 
-/***/ 36253:
+/***/ 16012:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.synchronizeFiles = void 0;
-const helpers_1 = __nccwpck_require__(83738);
-const types_1 = __nccwpck_require__(15754);
-const poweron_detection_1 = __nccwpck_require__(15893);
-const https_validate_1 = __nccwpck_require__(17221);
-const https_install_1 = __nccwpck_require__(54252);
-const https_uninstall_1 = __nccwpck_require__(99337);
-const synchronizeFiles = async (client, sshClient, host, config, sshConfig, localDirectory, remoteDirectory, installPowerOnList, isDryRun, logger, logPrefix, syncMode = types_1.SymitarSyncMode.MIRROR, validateIgnoreList = []) => {
-    if (syncMode === types_1.SymitarSyncMode.PULL) {
-        throw new Error('Pull mode is not supported for synchronizeFiles. Use executeRsync directly for pull operations.');
-    }
-    if (!sshClient) {
-        throw new Error('Unable to synchronize files without SSH client');
-    }
+exports.syncFiles = void 0;
+const types_1 = __nccwpck_require__(54737);
+const poweron_detection_1 = __nccwpck_require__(10622);
+const helpers_1 = __nccwpck_require__(48321);
+const sftp_sync_1 = __nccwpck_require__(90235);
+const https_validate_1 = __nccwpck_require__(92722);
+const https_install_1 = __nccwpck_require__(30489);
+const https_uninstall_1 = __nccwpck_require__(33360);
+const syncFiles = async (client, sshClient, sshConfig, config, localDirectory, remoteDirectory, syncMode, isDryRun, logger, logPrefix, options = {}) => {
+    const syncLogPrefix = '[SyncFiles]';
+    const transport = options.transport || types_1.SymitarSyncTransport.RSYNC;
+    const isPowerOnDirectory = remoteDirectory === types_1.SymitarSyncDirectory.REPWRITERSPECS;
+    const hasPowerOnOptions = options.powerOn && isPowerOnDirectory;
+    const shouldValidate = hasPowerOnOptions &&
+        syncMode !== types_1.SymitarSyncMode.PULL &&
+        !options.powerOn?.skipValidation;
+    const shouldInstall = hasPowerOnOptions &&
+        syncMode !== types_1.SymitarSyncMode.PULL &&
+        !options.powerOn?.skipInstallation &&
+        options.powerOn?.installList &&
+        options.powerOn.installList.length > 0;
     await sshClient.isReady;
-    const syncLogPrefix = '[SynchronizeFiles]';
-    logger.info(`${syncLogPrefix} Preparing to synchronize ${remoteDirectory} files (mode: ${syncMode})`);
-    const { deleted, deployed } = await sshClient.getChangedFiles(config, localDirectory, remoteDirectory, syncMode);
+    logger.debug(`${syncLogPrefix} Starting ${syncMode} sync of ${remoteDirectory} using ${transport}${isDryRun ? ' (dry run)' : ''}`);
+    const changedFiles = await sshClient.getChangedFiles(config, localDirectory, remoteDirectory, syncMode, options);
+    const { deleted, deployed } = changedFiles;
     if (deleted.length === 0 && deployed.length === 0) {
-        logger.info(`${syncLogPrefix} No changes detected in ${remoteDirectory} files. Nothing to synchronize.`);
+        logger.debug(`${syncLogPrefix} No changes detected. Nothing to sync.`);
         return {
+            synced: [],
             deleted: [],
-            deployed: [],
+            skipped: [],
+            errors: [],
             installed: [],
             uninstalled: [],
         };
     }
-    const isPowerOnDirectory = remoteDirectory === types_1.SymitarSyncDirectory.REPWRITERSPECS;
-    if (isPowerOnDirectory) {
-        logger.info(`${syncLogPrefix} Validating changed PowerOn files`);
+    if (shouldValidate) {
+        logger.debug(`${syncLogPrefix} Validating changed PowerOn files`);
+        const validateIgnoreList = options.powerOn?.validateIgnoreList || [];
         const invalidPowerOns = [];
         const candidateFiles = deployed
             .filter((file) => !deleted.includes(file))
@@ -4963,7 +4950,7 @@ const synchronizeFiles = async (client, sshClient, host, config, sshConfig, loca
         if (validateIgnoreList.length > 0) {
             const skippedByIgnoreList = deployed.filter((file) => !deleted.includes(file) && validateIgnoreList.includes(file));
             if (skippedByIgnoreList.length > 0) {
-                logger.info(`${syncLogPrefix} Skipping validation for ${skippedByIgnoreList.length} file(s) in ignore list: ${skippedByIgnoreList.join(', ')}`);
+                logger.debug(`${syncLogPrefix} Skipping validation for ${skippedByIgnoreList.length} file(s) in ignore list: ${skippedByIgnoreList.join(', ')}`);
             }
         }
         const filesToValidate = [];
@@ -4971,7 +4958,7 @@ const synchronizeFiles = async (client, sshClient, host, config, sshConfig, loca
             const filePath = `${localDirectory}/${poweron}`;
             const skipReason = await (0, poweron_detection_1.getSkipReasonForFile)(filePath);
             if (skipReason) {
-                logger.info(`${syncLogPrefix} Skipping validation for ${poweron}: ${skipReason}`);
+                logger.debug(`${syncLogPrefix} Skipping validation for ${poweron}: ${skipReason}`);
             }
             else {
                 filesToValidate.push(poweron);
@@ -5001,43 +4988,80 @@ const synchronizeFiles = async (client, sshClient, host, config, sshConfig, loca
                     .join('\n'))
                 .join('\n');
             logger.error(`${syncLogPrefix} Invalid PowerOn files detected:\n${details}`);
-            throw new Error(`Invalid PowerOn files detected. Please fix the errors before synchronizing.`);
+            throw new Error(`Invalid PowerOn files detected. Please fix the errors before syncing.`);
         }
     }
-    logger.info(`${syncLogPrefix} Beginning synchronization of ${remoteDirectory} files ${isDryRun ? '(Dry Run)' : ''}`);
-    try {
-        !isDryRun &&
-            (await (0, helpers_1.executeRsync)({
-                host: host,
-                ...sshConfig,
+    let syncResult;
+    if (!isDryRun) {
+        if (transport === types_1.SymitarSyncTransport.SFTP) {
+            const sftpService = new sftp_sync_1.SFTPSyncService();
+            try {
+                syncResult = await sftpService.sync({
+                    host: sshConfig.host,
+                    port: sshConfig.port || 22,
+                    username: sshConfig.username,
+                    password: sshConfig.password,
+                    symNumber: config.symNumber,
+                    localDirectory,
+                    remoteDirectory,
+                    syncMode,
+                    concurrency: options.concurrency,
+                    onProgress: options.onProgress,
+                }, false, logger);
+            }
+            finally {
+                await sftpService.disconnect();
+            }
+        }
+        else {
+            await (0, helpers_1.executeRsync)({
+                host: sshConfig.host,
+                username: sshConfig.username,
+                password: sshConfig.password,
                 symNumber: config.symNumber,
                 localDirectory,
                 remoteDirectory,
                 syncMode,
-            }, isDryRun));
-        const installed = [];
-        const uninstalled = [];
-        const hasDeployedPowerOnFiles = isPowerOnDirectory &&
-            deployed.length > 0 &&
-            deployed.some((item) => installPowerOnList.includes(item));
-        const hasDeletedPowerOnFiles = isPowerOnDirectory &&
-            deleted.length > 0 &&
-            deleted.some((item) => installPowerOnList.includes(item));
+            }, false);
+            syncResult = {
+                synced: deployed,
+                deleted,
+                skipped: [],
+                errors: [],
+            };
+        }
+    }
+    else {
+        syncResult = {
+            synced: deployed,
+            deleted,
+            skipped: [],
+            errors: [],
+        };
+    }
+    const installed = [];
+    const uninstalled = [];
+    if (shouldInstall) {
+        const installList = options.powerOn.installList;
+        const hasDeployedPowerOnFiles = deployed.length > 0 &&
+            deployed.some((item) => installList.includes(item));
+        const hasDeletedPowerOnFiles = deleted.length > 0 && deleted.some((item) => installList.includes(item));
         if (hasDeployedPowerOnFiles) {
-            const installPowerOnFiles = deployed.filter((item) => installPowerOnList.includes(item));
-            logger.info(`${syncLogPrefix} Found PowerOn files to install: ${installPowerOnFiles.join(', ')} ${isDryRun ? '(Dry Run)' : ''}`);
+            const installPowerOnFiles = deployed.filter((item) => installList.includes(item));
+            logger.debug(`${syncLogPrefix} Found PowerOn files to install: ${installPowerOnFiles.join(', ')} ${isDryRun ? '(Dry Run)' : ''}`);
             for (const poweron of installPowerOnFiles) {
                 if (!isDryRun) {
-                    await (0, https_install_1.installPowerOn)(client, `${localDirectory}${poweron}`);
+                    await (0, https_install_1.installPowerOn)(client, `${localDirectory}${poweron}`, logger, logPrefix);
+                    installed.push(poweron);
                 }
                 else {
-                    logger.info(`${syncLogPrefix} Would install PowerOn: ${poweron} (Dry Run)`);
+                    logger.debug(`${syncLogPrefix} Would install PowerOn: ${poweron} (Dry Run)`);
                 }
             }
         }
         if (hasDeletedPowerOnFiles) {
-            const uninstallPowerOnFiles = deleted.filter((item) => installPowerOnList.includes(item));
-            logger.info(`${syncLogPrefix} Found PowerOn files to uninstall: ${uninstallPowerOnFiles.join(', ')} ${isDryRun ? '(Dry Run)' : ''}`);
+            const uninstallPowerOnFiles = deleted.filter((item) => installList.includes(item));
+            logger.debug(`${syncLogPrefix} Found PowerOn files to uninstall: ${uninstallPowerOnFiles.join(', ')} ${isDryRun ? '(Dry Run)' : ''}`);
             for (const poweron of uninstallPowerOnFiles) {
                 if (!isDryRun) {
                     try {
@@ -5046,7 +5070,7 @@ const synchronizeFiles = async (client, sshClient, host, config, sshConfig, loca
                     }
                     catch (error) {
                         if (error.message.includes('No such file')) {
-                            logger.info(`${syncLogPrefix} Skipping uninstall of PowerOn (not currently installed): ${poweron}`);
+                            logger.debug(`${syncLogPrefix} Skipping uninstall of PowerOn (not currently installed): ${poweron}`);
                         }
                         else {
                             throw error;
@@ -5054,29 +5078,24 @@ const synchronizeFiles = async (client, sshClient, host, config, sshConfig, loca
                     }
                 }
                 else {
-                    logger.info(`${syncLogPrefix} Would uninstall PowerOn: ${poweron} (Dry Run)`);
+                    logger.debug(`${syncLogPrefix} Would uninstall PowerOn: ${poweron} (Dry Run)`);
                 }
             }
         }
-        logger.info(`${syncLogPrefix} Synchronized ${remoteDirectory} files: ${deployed.length} deployed, ${deleted.length} deleted ${isDryRun ? '(Dry Run)' : ''}`);
-        return {
-            deleted,
-            deployed,
-            installed,
-            uninstalled,
-        };
     }
-    catch (error) {
-        logger.error(`${logPrefix} Unable to synchronize ${remoteDirectory} files: ${error.message}`);
-        throw error;
-    }
+    logger.debug(`${syncLogPrefix} Sync complete: ${syncResult.synced.length} synced, ${syncResult.deleted.length} deleted${installed.length > 0 ? `, ${installed.length} installed` : ''}${uninstalled.length > 0 ? `, ${uninstalled.length} uninstalled` : ''}`);
+    return {
+        ...syncResult,
+        installed,
+        uninstalled,
+    };
 };
-exports.synchronizeFiles = synchronizeFiles;
+exports.syncFiles = syncFiles;
 //# sourceMappingURL=https.synchronize.js.map
 
 /***/ }),
 
-/***/ 99337:
+/***/ 33360:
 /***/ ((__unused_webpack_module, exports) => {
 
 "use strict";
@@ -5105,7 +5124,7 @@ exports.uninstallPowerOn = uninstallPowerOn;
 
 /***/ }),
 
-/***/ 17221:
+/***/ 92722:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
@@ -5116,10 +5135,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.validatePowerOn = void 0;
 const path_1 = __importDefault(__nccwpck_require__(16928));
-const helpers_1 = __nccwpck_require__(83738);
-const types_1 = __nccwpck_require__(15754);
-const constants_1 = __nccwpck_require__(35278);
-const https_remove_1 = __nccwpck_require__(67419);
+const helpers_1 = __nccwpck_require__(48321);
+const types_1 = __nccwpck_require__(54737);
+const constants_1 = __nccwpck_require__(65433);
+const https_remove_1 = __nccwpck_require__(14496);
 const validatePowerOn = async (client, sshClient, config, localFilePath, options, logger, logPrefix) => {
     const install = options.install ?? false;
     const isOffline = install ? false : (options.isOffline ?? true);
@@ -5173,7 +5192,7 @@ exports.validatePowerOn = validatePowerOn;
 
 /***/ }),
 
-/***/ 82540:
+/***/ 51313:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
@@ -5181,8 +5200,8 @@ exports.validatePowerOn = validatePowerOn;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.SymitarSSHExecutePowerOn = void 0;
 const rxjs_1 = __nccwpck_require__(17828);
-const types_1 = __nccwpck_require__(15754);
-const ssh_worker_1 = __nccwpck_require__(40033);
+const types_1 = __nccwpck_require__(54737);
+const ssh_worker_1 = __nccwpck_require__(97594);
 class SymitarSSHExecutePowerOn extends ssh_worker_1.SymitarSSHWorker {
     get logPrefix() {
         return `[SymitarSSHExecutePowerOn]`;
@@ -5241,7 +5260,7 @@ exports.SymitarSSHExecutePowerOn = SymitarSSHExecutePowerOn;
 
 /***/ }),
 
-/***/ 50400:
+/***/ 15725:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
@@ -5287,9 +5306,9 @@ exports.SymitarSSHInstallPowerOn = void 0;
 const path_1 = __importDefault(__nccwpck_require__(16928));
 const fs = __importStar(__nccwpck_require__(79896));
 const rxjs_1 = __nccwpck_require__(17828);
-const helpers_1 = __nccwpck_require__(83738);
-const types_1 = __nccwpck_require__(15754);
-const ssh_worker_1 = __nccwpck_require__(40033);
+const helpers_1 = __nccwpck_require__(48321);
+const types_1 = __nccwpck_require__(54737);
+const ssh_worker_1 = __nccwpck_require__(97594);
 async function sendInstallCommand(worker, powerOnName) {
     worker['setState']('executing');
     worker['send']([`${powerOnName}\r`, 'y\r']);
@@ -5356,7 +5375,7 @@ exports.SymitarSSHInstallPowerOn = SymitarSSHInstallPowerOn;
 
 /***/ }),
 
-/***/ 9625:
+/***/ 44700:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
@@ -5368,17 +5387,18 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.SymitarSSH = void 0;
 const path_1 = __importDefault(__nccwpck_require__(16928));
 const ssh2_1 = __nccwpck_require__(41828);
-const ssh_validate_1 = __nccwpck_require__(30393);
-const ssh_transfer_1 = __nccwpck_require__(97432);
-const ssh_install_1 = __nccwpck_require__(50400);
-const ssh_uninstall_1 = __nccwpck_require__(90989);
-const ssh_execute_1 = __nccwpck_require__(82540);
-const ssh_synchronize_1 = __nccwpck_require__(3425);
-const ssh_list_1 = __nccwpck_require__(30215);
-const types_1 = __nccwpck_require__(15754);
-const helpers_1 = __nccwpck_require__(83738);
-const logging_1 = __nccwpck_require__(82322);
-const ssh_reports_1 = __nccwpck_require__(32224);
+const ssh_validate_1 = __nccwpck_require__(50550);
+const ssh_transfer_1 = __nccwpck_require__(18983);
+const ssh_install_1 = __nccwpck_require__(15725);
+const ssh_uninstall_1 = __nccwpck_require__(61252);
+const ssh_execute_1 = __nccwpck_require__(51313);
+const ssh_synchronize_1 = __nccwpck_require__(60496);
+const ssh_list_1 = __nccwpck_require__(84480);
+const types_1 = __nccwpck_require__(54737);
+const sftp_sync_1 = __nccwpck_require__(90235);
+const helpers_1 = __nccwpck_require__(48321);
+const logging_1 = __nccwpck_require__(21613);
+const ssh_reports_1 = __nccwpck_require__(24157);
 class SymitarSSH {
     _client = new ssh2_1.Client();
     _connected = false;
@@ -5465,7 +5485,28 @@ class SymitarSSH {
             this._logger.warn(`${this._logPrefix} Fetching reports is not currently supported`);
         }
     }
-    async getChangedFiles(symitarConfig, localDirectory, remoteDirectory = types_1.SymitarSyncDirectory.REPWRITERSPECS, syncMode = types_1.SymitarSyncMode.MIRROR) {
+    async getChangedFiles(symitarConfig, localDirectory, remoteDirectory = types_1.SymitarSyncDirectory.REPWRITERSPECS, syncMode = types_1.SymitarSyncMode.MIRROR, options = {}) {
+        const transport = options.transport || types_1.SymitarSyncTransport.RSYNC;
+        if (transport === types_1.SymitarSyncTransport.SFTP) {
+            const sftpService = new sftp_sync_1.SFTPSyncService();
+            try {
+                return await sftpService.getChangedFiles({
+                    host: this._config.host,
+                    port: this._config.port || 22,
+                    username: this._config.username,
+                    password: this._config.password,
+                    symNumber: symitarConfig.symNumber,
+                    localDirectory,
+                    remoteDirectory,
+                    syncMode,
+                    concurrency: options.concurrency,
+                    onProgress: options.onProgress,
+                }, this._logger);
+            }
+            finally {
+                await sftpService.disconnect();
+            }
+        }
         return (0, ssh_synchronize_1.getChangedFiles)(this._config, symitarConfig, localDirectory, remoteDirectory, this._logger, syncMode);
     }
     async listFiles(symitarConfig, directory) {
@@ -5473,8 +5514,17 @@ class SymitarSSH {
             await this.isReady;
         return (0, ssh_list_1.listFiles)(this._client, symitarConfig, directory, this._logger, this._logPrefix);
     }
-    async synchronizeFiles(symitarConfig, localDirectory, installPowerOnList, isDryRun = true, remoteDirectory = types_1.SymitarSyncDirectory.REPWRITERSPECS, syncMode = types_1.SymitarSyncMode.MIRROR, validateIgnoreList = []) {
-        return (0, ssh_synchronize_1.synchronizeFiles)(this._config, symitarConfig, localDirectory, remoteDirectory, installPowerOnList, isDryRun, this._logger, () => this.createValidateWorker(symitarConfig), () => this.createInstallWorker(symitarConfig), () => this.createUninstallWorker(symitarConfig), syncMode, validateIgnoreList);
+    async syncFiles(symitarConfig, localDirectory, remoteDirectory, syncMode, options, isDryRun = true) {
+        return (0, ssh_synchronize_1.syncFiles)(this._config, symitarConfig, localDirectory, remoteDirectory, syncMode, isDryRun, this._logger, options, () => this.createValidateWorker(symitarConfig), () => this.createInstallWorker(symitarConfig), () => this.createUninstallWorker(symitarConfig));
+    }
+    async synchronizeFiles(symitarConfig, localDirectory, installPowerOnList, isDryRun = true, remoteDirectory = types_1.SymitarSyncDirectory.REPWRITERSPECS, syncMode = types_1.SymitarSyncMode.MIRROR, validateIgnoreList = [], options = {}) {
+        return this.syncFiles(symitarConfig, localDirectory, remoteDirectory, syncMode, {
+            ...options,
+            powerOn: {
+                installList: installPowerOnList,
+                validateIgnoreList,
+            },
+        }, isDryRun);
     }
     async createInstallWorker(config) {
         return this.createWorker(types_1.SymitarWorkerType.INSTALL_POWERON, config);
@@ -5540,14 +5590,14 @@ exports.SymitarSSH = SymitarSSH;
 
 /***/ }),
 
-/***/ 30215:
+/***/ 84480:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.listFiles = listFiles;
-const helpers_1 = __nccwpck_require__(83738);
+const helpers_1 = __nccwpck_require__(48321);
 function execCommand(client, command) {
     return new Promise((resolve, reject) => {
         client.exec(command, (err, stream) => {
@@ -5591,7 +5641,7 @@ async function listFiles(client, config, directory, logger, logPrefix) {
 
 /***/ }),
 
-/***/ 32224:
+/***/ 24157:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
@@ -5600,8 +5650,8 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.fetchLatestReportByTitle = fetchLatestReportByTitle;
 exports.fetchReportBySequence = fetchReportBySequence;
 exports.waitForBatchSequences = waitForBatchSequences;
-const helpers_1 = __nccwpck_require__(83738);
-const scripts_1 = __nccwpck_require__(98631);
+const helpers_1 = __nccwpck_require__(48321);
+const scripts_1 = __nccwpck_require__(87876);
 const SCRIPT_DIR = '.libum';
 const DEFAULT_TIMEOUT = 30000;
 function execCommand(client, command, logger, logPrefix) {
@@ -5799,20 +5849,42 @@ async function waitForBatchSequences(client, config, title, timeoutSeconds, logg
 
 /***/ }),
 
-/***/ 3425:
+/***/ 60496:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.synchronizeFiles = exports.getChangedFiles = void 0;
-const helpers_1 = __nccwpck_require__(83738);
-const types_1 = __nccwpck_require__(15754);
-const poweron_detection_1 = __nccwpck_require__(15893);
-const getChangedFiles = async (sshConfig, symitarConfig, localDirectory, remoteDirectory, logger, syncMode = types_1.SymitarSyncMode.MIRROR) => {
+exports.syncFiles = exports.getChangedFiles = void 0;
+const helpers_1 = __nccwpck_require__(48321);
+const types_1 = __nccwpck_require__(54737);
+const sftp_sync_1 = __nccwpck_require__(90235);
+const poweron_detection_1 = __nccwpck_require__(10622);
+const getChangedFiles = async (sshConfig, symitarConfig, localDirectory, remoteDirectory, logger, syncMode = types_1.SymitarSyncMode.MIRROR, options = {}) => {
     const logPrefix = '[GetChangedFiles]';
+    const transport = options.transport || types_1.SymitarSyncTransport.RSYNC;
     try {
-        logger.debug(`${logPrefix} Checking for changed files in ${remoteDirectory} (mode: ${syncMode})`);
+        logger.debug(`${logPrefix} Checking for changed files in ${remoteDirectory} (mode: ${syncMode}, transport: ${transport})`);
+        if (transport === types_1.SymitarSyncTransport.SFTP) {
+            const sftpService = new sftp_sync_1.SFTPSyncService();
+            try {
+                return await sftpService.getChangedFiles({
+                    host: sshConfig.host,
+                    port: sshConfig.port || 22,
+                    username: sshConfig.username,
+                    password: sshConfig.password,
+                    symNumber: symitarConfig.symNumber,
+                    localDirectory,
+                    remoteDirectory,
+                    syncMode,
+                    concurrency: options.concurrency,
+                    onProgress: options.onProgress,
+                }, logger);
+            }
+            finally {
+                await sftpService.disconnect();
+            }
+        }
         const changedFiles = await (0, helpers_1.executeRsync)({
             host: sshConfig.host,
             username: sshConfig.username,
@@ -5830,24 +5902,36 @@ const getChangedFiles = async (sshConfig, symitarConfig, localDirectory, remoteD
     }
 };
 exports.getChangedFiles = getChangedFiles;
-const synchronizeFiles = async (sshConfig, symitarConfig, localDirectory, remoteDirectory, installPowerOnList, isDryRun, logger, createValidateWorker, createInstallWorker, createUninstallWorker, syncMode = types_1.SymitarSyncMode.MIRROR, validateIgnoreList = []) => {
-    const logPrefix = '[SynchronizeFiles]';
-    if (syncMode === types_1.SymitarSyncMode.PULL) {
-        throw new Error('Pull mode is not supported for synchronizeFiles. Use executeRsync directly for pull operations.');
-    }
-    const { deleted, deployed } = await (0, exports.getChangedFiles)(sshConfig, symitarConfig, localDirectory, remoteDirectory, logger, syncMode);
+const syncFiles = async (sshConfig, symitarConfig, localDirectory, remoteDirectory, syncMode, isDryRun, logger, options = {}, createValidateWorker, createInstallWorker, createUninstallWorker) => {
+    const logPrefix = '[SyncFiles]';
+    const transport = options.transport || types_1.SymitarSyncTransport.RSYNC;
+    const isPowerOnDirectory = remoteDirectory === types_1.SymitarSyncDirectory.REPWRITERSPECS;
+    const hasPowerOnOptions = options.powerOn && isPowerOnDirectory;
+    const shouldValidate = hasPowerOnOptions &&
+        syncMode !== types_1.SymitarSyncMode.PULL &&
+        !options.powerOn?.skipValidation;
+    const shouldInstall = hasPowerOnOptions &&
+        syncMode !== types_1.SymitarSyncMode.PULL &&
+        !options.powerOn?.skipInstallation &&
+        options.powerOn?.installList &&
+        options.powerOn.installList.length > 0;
+    logger.debug(`${logPrefix} Starting ${syncMode} sync of ${remoteDirectory} using ${transport} transport${isDryRun ? ' (dry run)' : ''}`);
+    const changedFiles = await (0, exports.getChangedFiles)(sshConfig, symitarConfig, localDirectory, remoteDirectory, logger, syncMode, options);
+    const { deleted, deployed } = changedFiles;
     if (deleted.length === 0 && deployed.length === 0) {
-        logger.info(`${logPrefix} No changes detected in ${remoteDirectory} files. Nothing to synchronize.`);
+        logger.debug(`${logPrefix} No changes detected. Nothing to sync.`);
         return {
+            synced: [],
             deleted: [],
-            deployed: [],
+            skipped: [],
+            errors: [],
             installed: [],
             uninstalled: [],
         };
     }
-    const isPowerOnDirectory = remoteDirectory === types_1.SymitarSyncDirectory.REPWRITERSPECS;
-    if (isPowerOnDirectory) {
-        logger.info(`${logPrefix} Validating changed PowerOn files`);
+    if (shouldValidate && createValidateWorker) {
+        logger.debug(`${logPrefix} Validating changed PowerOn files`);
+        const validateIgnoreList = options.powerOn?.validateIgnoreList || [];
         const invalidPowerOns = [];
         const candidateFiles = deployed
             .filter((file) => !deleted.includes(file))
@@ -5855,7 +5939,7 @@ const synchronizeFiles = async (sshConfig, symitarConfig, localDirectory, remote
         if (validateIgnoreList.length > 0) {
             const skippedByIgnoreList = deployed.filter((file) => !deleted.includes(file) && validateIgnoreList.includes(file));
             if (skippedByIgnoreList.length > 0) {
-                logger.info(`${logPrefix} Skipping validation for ${skippedByIgnoreList.length} file(s) in ignore list: ${skippedByIgnoreList.join(', ')}`);
+                logger.debug(`${logPrefix} Skipping validation for ${skippedByIgnoreList.length} file(s) in ignore list: ${skippedByIgnoreList.join(', ')}`);
             }
         }
         const filesToValidate = [];
@@ -5863,7 +5947,7 @@ const synchronizeFiles = async (sshConfig, symitarConfig, localDirectory, remote
             const filePath = `${localDirectory}/${poweron}`;
             const skipReason = await (0, poweron_detection_1.getSkipReasonForFile)(filePath);
             if (skipReason) {
-                logger.info(`${logPrefix} Skipping validation for ${poweron}: ${skipReason}`);
+                logger.debug(`${logPrefix} Skipping validation for ${poweron}: ${skipReason}`);
             }
             else {
                 filesToValidate.push(poweron);
@@ -5896,13 +5980,33 @@ const synchronizeFiles = async (sshConfig, symitarConfig, localDirectory, remote
                     .join('\n'))
                 .join('\n');
             logger.error(`${logPrefix} Invalid PowerOn files detected:\n${details}`);
-            throw new Error(`Invalid PowerOn files detected. Please fix the errors before synchronizing.`);
+            throw new Error(`Invalid PowerOn files detected. Please fix the errors before syncing.`);
         }
     }
-    logger.info(`${logPrefix} Beginning synchronization of ${remoteDirectory} files ${isDryRun ? '(Dry Run)' : ''}`);
-    try {
-        !isDryRun &&
-            (await (0, helpers_1.executeRsync)({
+    let syncResult;
+    if (!isDryRun) {
+        if (transport === types_1.SymitarSyncTransport.SFTP) {
+            const sftpService = new sftp_sync_1.SFTPSyncService();
+            try {
+                syncResult = await sftpService.sync({
+                    host: sshConfig.host,
+                    port: sshConfig.port || 22,
+                    username: sshConfig.username,
+                    password: sshConfig.password,
+                    symNumber: symitarConfig.symNumber,
+                    localDirectory,
+                    remoteDirectory,
+                    syncMode,
+                    concurrency: options.concurrency,
+                    onProgress: options.onProgress,
+                }, isDryRun, logger);
+            }
+            finally {
+                await sftpService.disconnect();
+            }
+        }
+        else {
+            await (0, helpers_1.executeRsync)({
                 host: sshConfig.host,
                 username: sshConfig.username,
                 password: sshConfig.password,
@@ -5910,41 +6014,56 @@ const synchronizeFiles = async (sshConfig, symitarConfig, localDirectory, remote
                 localDirectory,
                 remoteDirectory,
                 syncMode,
-            }, isDryRun));
+            }, isDryRun);
+            syncResult = {
+                synced: deployed,
+                deleted,
+                skipped: [],
+                errors: [],
+            };
+        }
+    }
+    else {
+        syncResult = {
+            synced: deployed,
+            deleted,
+            skipped: [],
+            errors: [],
+        };
+    }
+    const installed = [];
+    const uninstalled = [];
+    if (shouldInstall && createInstallWorker && createUninstallWorker) {
+        const installList = options.powerOn.installList;
+        const hasDeployedPowerOnFiles = deployed.length > 0 &&
+            deployed.some((item) => installList.includes(item));
+        const hasDeletedPowerOnFiles = deleted.length > 0 && deleted.some((item) => installList.includes(item));
         let installWorker;
         let uninstallWorker;
-        const installed = [];
-        const uninstalled = [];
-        const hasDeployedPowerOnFiles = isPowerOnDirectory &&
-            deployed.length > 0 &&
-            deployed.some((item) => installPowerOnList.includes(item));
-        const hasDeletedPowerOnFiles = isPowerOnDirectory &&
-            deleted.length > 0 &&
-            deleted.some((item) => installPowerOnList.includes(item));
         if (!isDryRun && (hasDeployedPowerOnFiles || hasDeletedPowerOnFiles)) {
-            logger.info(`${logPrefix} Initializing PowerOn install worker for Sym ${symitarConfig.symNumber}`);
+            logger.debug(`${logPrefix} Initializing PowerOn install workers for Sym ${symitarConfig.symNumber}`);
             installWorker = await createInstallWorker();
             uninstallWorker = await createUninstallWorker();
         }
         else if (hasDeployedPowerOnFiles || hasDeletedPowerOnFiles) {
-            logger.info(`${logPrefix} Would initialize PowerOn install worker for Sym ${symitarConfig.symNumber} (Dry Run)`);
+            logger.debug(`${logPrefix} Would initialize PowerOn install workers for Sym ${symitarConfig.symNumber} (Dry Run)`);
         }
         if (hasDeployedPowerOnFiles) {
-            const installPowerOnFiles = deployed.filter((item) => installPowerOnList.includes(item));
-            logger.info(`${logPrefix} Found PowerOn files to install: ${installPowerOnFiles.join(', ')} ${isDryRun ? '(Dry Run)' : ''}`);
+            const installPowerOnFiles = deployed.filter((item) => installList.includes(item));
+            logger.debug(`${logPrefix} Found PowerOn files to install: ${installPowerOnFiles.join(', ')} ${isDryRun ? '(Dry Run)' : ''}`);
             for (const poweron of installPowerOnFiles) {
                 if (!isDryRun) {
                     await installWorker.installPowerOn(`${localDirectory}${poweron}`);
                     installed.push(poweron);
                 }
                 else {
-                    logger.info(`${logPrefix} Would install PowerOn: ${poweron} (Dry Run)`);
+                    logger.debug(`${logPrefix} Would install PowerOn: ${poweron} (Dry Run)`);
                 }
             }
         }
         if (hasDeletedPowerOnFiles) {
-            const uninstallPowerOnFiles = deleted.filter((item) => installPowerOnList.includes(item));
-            logger.info(`${logPrefix} Found PowerOn files to uninstall: ${uninstallPowerOnFiles.join(', ')} ${isDryRun ? '(Dry Run)' : ''}`);
+            const uninstallPowerOnFiles = deleted.filter((item) => installList.includes(item));
+            logger.debug(`${logPrefix} Found PowerOn files to uninstall: ${uninstallPowerOnFiles.join(', ')} ${isDryRun ? '(Dry Run)' : ''}`);
             for (const poweron of uninstallPowerOnFiles) {
                 if (!isDryRun) {
                     try {
@@ -5953,7 +6072,7 @@ const synchronizeFiles = async (sshConfig, symitarConfig, localDirectory, remote
                     }
                     catch (error) {
                         if (error.message.includes('No such file')) {
-                            logger.info(`${logPrefix} Skipping uninstall of PowerOn (not currently installed): ${poweron}`);
+                            logger.debug(`${logPrefix} Skipping uninstall of PowerOn (not currently installed): ${poweron}`);
                         }
                         else {
                             throw error;
@@ -5961,29 +6080,24 @@ const synchronizeFiles = async (sshConfig, symitarConfig, localDirectory, remote
                     }
                 }
                 else {
-                    logger.info(`${logPrefix} Would uninstall PowerOn: ${poweron} (Dry Run)`);
+                    logger.debug(`${logPrefix} Would uninstall PowerOn: ${poweron} (Dry Run)`);
                 }
             }
         }
-        logger.info(`${logPrefix} Synchronized ${remoteDirectory} files: ${deployed.length} deployed, ${deleted.length} deleted ${isDryRun ? '(Dry Run)' : ''}`);
-        return {
-            deleted,
-            deployed,
-            installed,
-            uninstalled,
-        };
     }
-    catch (error) {
-        logger.error(`[SymitarSSH] Unable to synchronize ${remoteDirectory} files: ${error.message}`);
-        throw error;
-    }
+    logger.debug(`${logPrefix} Sync complete: ${syncResult.synced.length} synced, ${syncResult.deleted.length} deleted${installed.length > 0 ? `, ${installed.length} installed` : ''}${uninstalled.length > 0 ? `, ${uninstalled.length} uninstalled` : ''}`);
+    return {
+        ...syncResult,
+        installed,
+        uninstalled,
+    };
 };
-exports.synchronizeFiles = synchronizeFiles;
+exports.syncFiles = syncFiles;
 //# sourceMappingURL=ssh.synchronize.js.map
 
 /***/ }),
 
-/***/ 97432:
+/***/ 18983:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
@@ -6028,8 +6142,8 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.SymitarSSHTransferFile = void 0;
 const path_1 = __importDefault(__nccwpck_require__(16928));
 const fs = __importStar(__nccwpck_require__(79896));
-const ssh_worker_1 = __nccwpck_require__(40033);
-const helpers_1 = __nccwpck_require__(83738);
+const ssh_worker_1 = __nccwpck_require__(97594);
+const helpers_1 = __nccwpck_require__(48321);
 class SymitarSSHTransferFile extends ssh_worker_1.SymitarSSHWorker {
     get logPrefix() {
         return `[SymitarSSHTransferFile]`;
@@ -6093,15 +6207,15 @@ exports.SymitarSSHTransferFile = SymitarSSHTransferFile;
 
 /***/ }),
 
-/***/ 90989:
+/***/ 61252:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.SymitarSSHUninstallPowerOn = void 0;
-const types_1 = __nccwpck_require__(15754);
-const ssh_worker_1 = __nccwpck_require__(40033);
+const types_1 = __nccwpck_require__(54737);
+const ssh_worker_1 = __nccwpck_require__(97594);
 const rxjs_1 = __nccwpck_require__(17828);
 class SymitarSSHUninstallPowerOn extends ssh_worker_1.SymitarSSHWorker {
     get logPrefix() {
@@ -6126,7 +6240,7 @@ exports.SymitarSSHUninstallPowerOn = SymitarSSHUninstallPowerOn;
 
 /***/ }),
 
-/***/ 30393:
+/***/ 50550:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
@@ -6172,10 +6286,10 @@ exports.SymitarSSHValidatePowerOn = void 0;
 const path_1 = __importDefault(__nccwpck_require__(16928));
 const fs = __importStar(__nccwpck_require__(79896));
 const rxjs_1 = __nccwpck_require__(17828);
-const ssh_worker_1 = __nccwpck_require__(40033);
-const constants_1 = __nccwpck_require__(35278);
-const helpers_1 = __nccwpck_require__(83738);
-const types_1 = __nccwpck_require__(15754);
+const ssh_worker_1 = __nccwpck_require__(97594);
+const constants_1 = __nccwpck_require__(65433);
+const helpers_1 = __nccwpck_require__(48321);
+const types_1 = __nccwpck_require__(54737);
 class SymitarSSHValidatePowerOn extends ssh_worker_1.SymitarSSHWorker {
     _sftp = null;
     get logPrefix() {
@@ -6285,7 +6399,7 @@ exports.SymitarSSHValidatePowerOn = SymitarSSHValidatePowerOn;
 
 /***/ }),
 
-/***/ 40033:
+/***/ 97594:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
@@ -6293,10 +6407,10 @@ exports.SymitarSSHValidatePowerOn = SymitarSSHValidatePowerOn;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.SymitarSSHWorker = void 0;
 const rxjs_1 = __nccwpck_require__(17828);
-const constants_1 = __nccwpck_require__(35278);
-const types_1 = __nccwpck_require__(15754);
-const errors_1 = __nccwpck_require__(15876);
-const logging_1 = __nccwpck_require__(82322);
+const constants_1 = __nccwpck_require__(65433);
+const types_1 = __nccwpck_require__(54737);
+const errors_1 = __nccwpck_require__(88085);
+const logging_1 = __nccwpck_require__(21613);
 class SymitarSSHWorker {
     client;
     channel;
@@ -6531,7 +6645,7 @@ exports.SymitarSSHWorker = SymitarSSHWorker;
 
 /***/ }),
 
-/***/ 16287:
+/***/ 69058:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
@@ -6543,10 +6657,10 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.SymitarWS = exports.SymitarWSWorkArea = exports.SymitarWSState = exports.SymitarWSPatterns = void 0;
 const os_1 = __importDefault(__nccwpck_require__(70857));
 const ws_1 = __importDefault(__nccwpck_require__(33449));
-const winston_1 = __importDefault(__nccwpck_require__(68360));
-const helpers_1 = __nccwpck_require__(83738);
-const constants_1 = __nccwpck_require__(35278);
-const logging_1 = __nccwpck_require__(82322);
+const winston_1 = __importDefault(__nccwpck_require__(45530));
+const helpers_1 = __nccwpck_require__(48321);
+const constants_1 = __nccwpck_require__(65433);
+const logging_1 = __nccwpck_require__(21613);
 const rxjs_1 = __nccwpck_require__(17828);
 exports.SymitarWSPatterns = {
     SYM_LOGIN_PROMPT: /login as:/,
@@ -6762,7 +6876,7 @@ exports.SymitarWS = SymitarWS;
 
 /***/ }),
 
-/***/ 18257:
+/***/ 55696:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
@@ -6782,16 +6896,15 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.SymitarWorkerType = exports.SymitarSyncMode = exports.SymitarSyncDirectory = exports.SymitarDirectory = exports.SymitarAppServerFileType = exports.BatchQueueSelection = exports.getSkipReasonForFile = exports.getSkipReason = exports.shouldValidatePowerOnFile = exports.shouldValidatePowerOn = exports.shouldValidatePowerOnByExtension = exports.isValidPowerOnSpecfile = exports.hasPrintDivision = exports.hasTargetDivision = exports.getFirstWord = exports.removeBlockComments = exports.isPowerOnFile = exports.POWERON_PRINT_TITLE_PATTERN = exports.POWERON_TARGET_PATTERN = exports.EXTENSIONS_TO_SKIP_VALIDATION = exports.POWERON_EXTENSIONS = void 0;
-__exportStar(__nccwpck_require__(33053), exports);
-__exportStar(__nccwpck_require__(9625), exports);
-__exportStar(__nccwpck_require__(16287), exports);
-var poweron_detection_1 = __nccwpck_require__(15893);
+exports.disconnectSFTPSyncService = exports.getSFTPSyncService = exports.executeSFTPSync = exports.SFTPSyncService = exports.SymitarWorkerType = exports.SymitarSyncTransport = exports.SymitarSyncMode = exports.SymitarSyncDirectory = exports.SymitarDirectory = exports.SymitarAppServerFileType = exports.BatchQueueSelection = exports.getSkipReasonForFile = exports.getSkipReason = exports.shouldValidatePowerOnFile = exports.shouldValidatePowerOn = exports.shouldValidatePowerOnByExtension = exports.isValidPowerOnSpecfile = exports.hasPrintDivision = exports.hasTargetDivision = exports.getFirstWord = exports.removeBlockComments = exports.POWERON_PRINT_TITLE_PATTERN = exports.POWERON_TARGET_PATTERN = exports.EXTENSIONS_TO_SKIP_VALIDATION = exports.POWERON_EXTENSIONS = void 0;
+__exportStar(__nccwpck_require__(5616), exports);
+__exportStar(__nccwpck_require__(44700), exports);
+__exportStar(__nccwpck_require__(69058), exports);
+var poweron_detection_1 = __nccwpck_require__(10622);
 Object.defineProperty(exports, "POWERON_EXTENSIONS", ({ enumerable: true, get: function () { return poweron_detection_1.POWERON_EXTENSIONS; } }));
 Object.defineProperty(exports, "EXTENSIONS_TO_SKIP_VALIDATION", ({ enumerable: true, get: function () { return poweron_detection_1.EXTENSIONS_TO_SKIP_VALIDATION; } }));
 Object.defineProperty(exports, "POWERON_TARGET_PATTERN", ({ enumerable: true, get: function () { return poweron_detection_1.POWERON_TARGET_PATTERN; } }));
 Object.defineProperty(exports, "POWERON_PRINT_TITLE_PATTERN", ({ enumerable: true, get: function () { return poweron_detection_1.POWERON_PRINT_TITLE_PATTERN; } }));
-Object.defineProperty(exports, "isPowerOnFile", ({ enumerable: true, get: function () { return poweron_detection_1.isPowerOnFile; } }));
 Object.defineProperty(exports, "removeBlockComments", ({ enumerable: true, get: function () { return poweron_detection_1.removeBlockComments; } }));
 Object.defineProperty(exports, "getFirstWord", ({ enumerable: true, get: function () { return poweron_detection_1.getFirstWord; } }));
 Object.defineProperty(exports, "hasTargetDivision", ({ enumerable: true, get: function () { return poweron_detection_1.hasTargetDivision; } }));
@@ -6802,25 +6915,31 @@ Object.defineProperty(exports, "shouldValidatePowerOn", ({ enumerable: true, get
 Object.defineProperty(exports, "shouldValidatePowerOnFile", ({ enumerable: true, get: function () { return poweron_detection_1.shouldValidatePowerOnFile; } }));
 Object.defineProperty(exports, "getSkipReason", ({ enumerable: true, get: function () { return poweron_detection_1.getSkipReason; } }));
 Object.defineProperty(exports, "getSkipReasonForFile", ({ enumerable: true, get: function () { return poweron_detection_1.getSkipReasonForFile; } }));
-var types_1 = __nccwpck_require__(15754);
+var types_1 = __nccwpck_require__(54737);
 Object.defineProperty(exports, "BatchQueueSelection", ({ enumerable: true, get: function () { return types_1.BatchQueueSelection; } }));
 Object.defineProperty(exports, "SymitarAppServerFileType", ({ enumerable: true, get: function () { return types_1.SymitarAppServerFileType; } }));
 Object.defineProperty(exports, "SymitarDirectory", ({ enumerable: true, get: function () { return types_1.SymitarDirectory; } }));
 Object.defineProperty(exports, "SymitarSyncDirectory", ({ enumerable: true, get: function () { return types_1.SymitarSyncDirectory; } }));
 Object.defineProperty(exports, "SymitarSyncMode", ({ enumerable: true, get: function () { return types_1.SymitarSyncMode; } }));
+Object.defineProperty(exports, "SymitarSyncTransport", ({ enumerable: true, get: function () { return types_1.SymitarSyncTransport; } }));
 Object.defineProperty(exports, "SymitarWorkerType", ({ enumerable: true, get: function () { return types_1.SymitarWorkerType; } }));
+var sftp_sync_1 = __nccwpck_require__(90235);
+Object.defineProperty(exports, "SFTPSyncService", ({ enumerable: true, get: function () { return sftp_sync_1.SFTPSyncService; } }));
+Object.defineProperty(exports, "executeSFTPSync", ({ enumerable: true, get: function () { return sftp_sync_1.executeSFTPSync; } }));
+Object.defineProperty(exports, "getSFTPSyncService", ({ enumerable: true, get: function () { return sftp_sync_1.getSFTPSyncService; } }));
+Object.defineProperty(exports, "disconnectSFTPSyncService", ({ enumerable: true, get: function () { return sftp_sync_1.disconnectSFTPSyncService; } }));
 //# sourceMappingURL=index.js.map
 
 /***/ }),
 
-/***/ 35278:
+/***/ 65433:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.MESSAGE_BLOCK = exports.CLI_VALIDATE_PATTERN = exports.CLI_SSH_WORKER_COMMANDS = exports.CLI_NON_ASCI_PATTERN = exports.CLI_EASE_PATTERN = exports.CLI_CONSOLE_PATTERN = exports.APP_SERVER_VALIDATE_PATTERN = exports.ESC = exports.SSHPASS_PATTERN = void 0;
-const types_1 = __nccwpck_require__(15754);
+const types_1 = __nccwpck_require__(54737);
 exports.SSHPASS_PATTERN = /sshpass -p ".*?"/;
 exports.ESC = '\u001b';
 exports.APP_SERVER_VALIDATE_PATTERN = /(Error in file)(\n|.)*?(Error: Specfile:)/gim;
@@ -6841,7 +6960,7 @@ exports.MESSAGE_BLOCK = /@begin~(.*?)~@end/;
 
 /***/ }),
 
-/***/ 15876:
+/***/ 88085:
 /***/ ((__unused_webpack_module, exports) => {
 
 "use strict";
@@ -6860,7 +6979,7 @@ exports.ERROR_MESSAGES = {
 
 /***/ }),
 
-/***/ 83738:
+/***/ 48321:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
@@ -6904,9 +7023,9 @@ const fs = __importStar(__nccwpck_require__(79896));
 const crypto = __importStar(__nccwpck_require__(76982));
 const child_process_1 = __nccwpck_require__(35317);
 const util_1 = __nccwpck_require__(39023);
-const constants_1 = __nccwpck_require__(35278);
-const types_1 = __nccwpck_require__(15754);
-const scripts_1 = __nccwpck_require__(98631);
+const constants_1 = __nccwpck_require__(65433);
+const types_1 = __nccwpck_require__(54737);
+const scripts_1 = __nccwpck_require__(87876);
 const execPromise = (0, util_1.promisify)(child_process_1.exec);
 const runBashScript = async (script, args = []) => {
     const isWindows = process.platform === 'win32';
@@ -7187,7 +7306,7 @@ exports.paddedSymNumber = paddedSymNumber;
 
 /***/ }),
 
-/***/ 82322:
+/***/ 21613:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
@@ -7200,7 +7319,7 @@ exports.mayContainCredentials = exports.sanitizeForLogging = void 0;
 exports.createTransports = createTransports;
 exports.createLogger = createLogger;
 const stream_1 = __nccwpck_require__(2203);
-const winston_1 = __importDefault(__nccwpck_require__(68360));
+const winston_1 = __importDefault(__nccwpck_require__(45530));
 const SSHPASS_PATTERN = /sshpass\s+-p\s+["']?[^"'\s]+["']?/gi;
 const SYMITAR_CREDENTIAL_PATTERN = /(\d{1,5})\.([^\s\r\n~]+)/g;
 const PASSWORD_VALUE_PATTERN = /password[=:]\s*["']?[^"'\s\r\n]+["']?/gi;
@@ -7258,7 +7377,7 @@ function createLogger(logLevel, customLogger) {
 
 /***/ }),
 
-/***/ 15893:
+/***/ 10622:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
@@ -7298,7 +7417,6 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.POWERON_PRINT_TITLE_PATTERN = exports.POWERON_TARGET_PATTERN = exports.EXTENSIONS_TO_SKIP_VALIDATION = exports.POWERON_EXTENSIONS = void 0;
-exports.isPowerOnFile = isPowerOnFile;
 exports.removeBlockComments = removeBlockComments;
 exports.getFirstWord = getFirstWord;
 exports.hasTargetDivision = hasTargetDivision;
@@ -7330,10 +7448,6 @@ exports.EXTENSIONS_TO_SKIP_VALIDATION = [
 ];
 exports.POWERON_TARGET_PATTERN = /target\s*=\s*\S+/i;
 exports.POWERON_PRINT_TITLE_PATTERN = /print\s+title\s*=\s*(?:"[^"]*"|\S+)/i;
-function isPowerOnFile(filePath) {
-    const ext = path.extname(filePath).toUpperCase();
-    return exports.POWERON_EXTENSIONS.some((poExt) => poExt === ext);
-}
 function removeBlockComments(content) {
     return content.replace(/\[[\s\S]*?\]/g, '');
 }
@@ -7425,7 +7539,7 @@ async function getSkipReasonForFile(filePath) {
 
 /***/ }),
 
-/***/ 98631:
+/***/ 87876:
 /***/ ((__unused_webpack_module, exports) => {
 
 "use strict";
@@ -7670,13 +7784,493 @@ exit 1
 
 /***/ }),
 
-/***/ 15754:
+/***/ 90235:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.disconnectSFTPSyncService = exports.executeSFTPSync = exports.getSFTPSyncService = exports.SFTPSyncService = void 0;
+const ssh2_1 = __nccwpck_require__(41828);
+const fs = __importStar(__nccwpck_require__(79896));
+const path = __importStar(__nccwpck_require__(16928));
+const util_1 = __nccwpck_require__(39023);
+const helpers_1 = __nccwpck_require__(48321);
+const types_1 = __nccwpck_require__(54737);
+const fsReaddir = (0, util_1.promisify)(fs.readdir);
+const fsStat = (0, util_1.promisify)(fs.stat);
+const fsMkdir = (0, util_1.promisify)(fs.mkdir);
+const fsUtimes = (0, util_1.promisify)(fs.utimes);
+const DEFAULT_CONCURRENCY = 20;
+class SFTPSyncService {
+    client = null;
+    sftp = null;
+    currentHost = null;
+    currentPort = null;
+    currentUsername = null;
+    logger = null;
+    logPrefix = '[SFTPSyncService]';
+    async sync(config, isDryRun = true, logger) {
+        this.logger = logger || null;
+        const syncMode = config.syncMode || types_1.SymitarSyncMode.MIRROR;
+        const isPull = syncMode === types_1.SymitarSyncMode.PULL;
+        const concurrency = config.concurrency || DEFAULT_CONCURRENCY;
+        const result = {
+            synced: [],
+            deleted: [],
+            skipped: [],
+            errors: [],
+        };
+        const remotePath = `/SYM/SYM${(0, helpers_1.paddedSymNumber)(config.symNumber)}/${config.remoteDirectory}/`;
+        const localPath = config.localDirectory.endsWith('/')
+            ? config.localDirectory
+            : `${config.localDirectory}/`;
+        try {
+            config.onProgress?.({ phase: 'connecting', current: 0, total: 0 });
+            await this.connect(config);
+            if (!this.sftp) {
+                throw new Error('SFTP connection not established');
+            }
+            config.onProgress?.({ phase: 'scanning', current: 0, total: 0 });
+            const remoteFiles = await this.listRemoteFiles(remotePath);
+            const localFiles = await this.listLocalFiles(localPath);
+            const { toSync, toDelete } = this.compareFiles(remoteFiles, localFiles, syncMode);
+            const syncSet = new Set(toSync.map((f) => f.name));
+            const deleteSet = new Set(toDelete);
+            const sourceFiles = isPull ? remoteFiles : localFiles;
+            for (const file of sourceFiles) {
+                if (!syncSet.has(file.name) && !deleteSet.has(file.name)) {
+                    result.skipped.push(file.name);
+                }
+            }
+            if (isDryRun) {
+                result.synced = toSync.map((f) => f.name);
+                result.deleted = toDelete;
+                this.log('info', `Dry run complete: ${toSync.length} to sync, ${toDelete.length} to delete`);
+                return result;
+            }
+            const totalOperations = toSync.length + toDelete.length;
+            let completed = 0;
+            const syncQueue = [...toSync];
+            const activeOps = [];
+            const startSync = (file) => {
+                const remoteFilePath = this.joinPosixPath(remotePath, file.name);
+                const localFilePath = path.join(localPath, file.name);
+                const operation = isPull
+                    ? this.downloadFile(remoteFilePath, localFilePath, file.mtime)
+                    : this.uploadFile(localFilePath, remoteFilePath);
+                return operation
+                    .then(() => {
+                    result.synced.push(file.name);
+                })
+                    .catch((err) => {
+                    result.errors.push({
+                        file: file.name,
+                        error: err.message || String(err),
+                    });
+                })
+                    .finally(() => {
+                    completed++;
+                    config.onProgress?.({
+                        phase: 'syncing',
+                        current: completed,
+                        total: totalOperations,
+                        currentFile: file.name,
+                    });
+                });
+            };
+            while (syncQueue.length > 0 || activeOps.length > 0) {
+                while (activeOps.length < concurrency && syncQueue.length > 0) {
+                    const file = syncQueue.shift();
+                    const op = startSync(file).then(() => {
+                        const idx = activeOps.indexOf(op);
+                        if (idx !== -1) {
+                            activeOps.splice(idx, 1);
+                        }
+                    });
+                    activeOps.push(op);
+                }
+                if (activeOps.length > 0) {
+                    await Promise.race(activeOps);
+                }
+            }
+            if (toDelete.length > 0) {
+                config.onProgress?.({
+                    phase: 'cleaning',
+                    current: completed,
+                    total: totalOperations,
+                });
+                for (const fileName of toDelete) {
+                    completed++;
+                    try {
+                        const remoteFilePath = this.joinPosixPath(remotePath, fileName);
+                        await this.deleteRemoteFile(remoteFilePath);
+                        result.deleted.push(fileName);
+                    }
+                    catch (err) {
+                        result.errors.push({
+                            file: fileName,
+                            error: err.message || String(err),
+                        });
+                    }
+                }
+            }
+            config.onProgress?.({
+                phase: 'complete',
+                current: totalOperations,
+                total: totalOperations,
+            });
+            this.log('info', `Sync complete: ${result.synced.length} synced, ${result.deleted.length} deleted`);
+        }
+        catch (err) {
+            result.errors.push({
+                file: '',
+                error: `Sync failed: ${err.message || String(err)}`,
+            });
+            this.log('error', `Sync failed: ${err.message}`);
+        }
+        return result;
+    }
+    async getChangedFiles(config, logger) {
+        const result = await this.sync(config, true, logger);
+        return {
+            deployed: result.synced,
+            deleted: result.deleted,
+        };
+    }
+    async connect(config) {
+        const { host, port = 22, username, password } = config;
+        if (this.client &&
+            this.sftp &&
+            this.currentHost === host &&
+            this.currentPort === port &&
+            this.currentUsername === username) {
+            return;
+        }
+        await this.disconnect();
+        return new Promise((resolve, reject) => {
+            this.client = new ssh2_1.Client();
+            this.client.on('ready', () => {
+                this.client.sftp((err, sftp) => {
+                    if (err) {
+                        reject(err);
+                        return;
+                    }
+                    this.sftp = sftp;
+                    this.currentHost = host;
+                    this.currentPort = port;
+                    this.currentUsername = username;
+                    this.log('debug', `Connected to ${host}:${port}`);
+                    resolve();
+                });
+            });
+            this.client.on('error', (err) => {
+                reject(err);
+            });
+            this.client.on('keyboard-interactive', (_name, _instructions, _lang, prompts, finish) => {
+                const responses = prompts.map(() => password);
+                finish(responses);
+            });
+            const connectConfig = {
+                host,
+                port,
+                username,
+                password,
+                tryKeyboard: true,
+                readyTimeout: 30000,
+                algorithms: {
+                    kex: [
+                        'ecdh-sha2-nistp256',
+                        'ecdh-sha2-nistp384',
+                        'ecdh-sha2-nistp521',
+                        'diffie-hellman-group-exchange-sha256',
+                        'diffie-hellman-group14-sha256',
+                        'diffie-hellman-group14-sha1',
+                        'diffie-hellman-group1-sha1',
+                    ],
+                    cipher: [
+                        'aes128-ctr',
+                        'aes192-ctr',
+                        'aes256-ctr',
+                        'aes128-gcm@openssh.com',
+                        'aes256-gcm@openssh.com',
+                        'aes256-cbc',
+                        'aes192-cbc',
+                        'aes128-cbc',
+                        '3des-cbc',
+                    ],
+                    serverHostKey: [
+                        'ssh-rsa',
+                        'ecdsa-sha2-nistp256',
+                        'ecdsa-sha2-nistp384',
+                        'ecdsa-sha2-nistp521',
+                        'ssh-ed25519',
+                        'rsa-sha2-256',
+                        'rsa-sha2-512',
+                    ],
+                    hmac: ['hmac-sha2-256', 'hmac-sha2-512', 'hmac-sha1'],
+                },
+            };
+            this.client.connect(connectConfig);
+        });
+    }
+    async listRemoteFiles(remotePath) {
+        return new Promise((resolve, reject) => {
+            if (!this.sftp) {
+                reject(new Error('SFTP not connected'));
+                return;
+            }
+            this.sftp.readdir(remotePath, (err, list) => {
+                if (err) {
+                    if (err.code === 2) {
+                        resolve([]);
+                        return;
+                    }
+                    reject(err);
+                    return;
+                }
+                const files = list
+                    .filter((entry) => {
+                    const attrs = entry.attrs;
+                    return attrs && !this.isDirectory(attrs.mode);
+                })
+                    .map((entry) => ({
+                    name: entry.filename,
+                    size: entry.attrs.size,
+                    mtime: entry.attrs.mtime,
+                    isDirectory: this.isDirectory(entry.attrs.mode),
+                }));
+                resolve(files);
+            });
+        });
+    }
+    async listLocalFiles(localPath) {
+        try {
+            await this.ensureLocalDirectory(localPath);
+            const entries = await fsReaddir(localPath);
+            const files = [];
+            for (const entry of entries) {
+                try {
+                    const filePath = path.join(localPath, entry);
+                    const stats = await fsStat(filePath);
+                    if (stats.isFile()) {
+                        files.push({
+                            name: entry,
+                            size: stats.size,
+                            mtime: Math.floor(stats.mtimeMs / 1000),
+                            isDirectory: false,
+                        });
+                    }
+                }
+                catch {
+                }
+            }
+            return files;
+        }
+        catch {
+            return [];
+        }
+    }
+    compareFiles(remoteFiles, localFiles, syncMode) {
+        const isPull = syncMode === types_1.SymitarSyncMode.PULL;
+        const isMirror = syncMode === types_1.SymitarSyncMode.MIRROR;
+        const sourceFiles = isPull ? remoteFiles : localFiles;
+        const targetFiles = isPull ? localFiles : remoteFiles;
+        const targetMap = new Map();
+        for (const file of targetFiles) {
+            targetMap.set(file.name, file);
+        }
+        const sourceSet = new Set();
+        const toSync = [];
+        for (const sourceFile of sourceFiles) {
+            sourceSet.add(sourceFile.name);
+            const targetFile = targetMap.get(sourceFile.name);
+            if (!targetFile) {
+                toSync.push(sourceFile);
+            }
+            else if (sourceFile.size !== targetFile.size) {
+                toSync.push(sourceFile);
+            }
+        }
+        const toDelete = [];
+        if (isMirror) {
+            for (const targetFile of targetFiles) {
+                if (!sourceSet.has(targetFile.name)) {
+                    toDelete.push(targetFile.name);
+                }
+            }
+        }
+        return { toSync, toDelete };
+    }
+    async downloadFile(remotePath, localPath, mtime) {
+        await this.ensureLocalDirectory(path.dirname(localPath));
+        return new Promise((resolve, reject) => {
+            if (!this.sftp) {
+                reject(new Error('SFTP not connected'));
+                return;
+            }
+            this.sftp.fastGet(remotePath, localPath, (err) => {
+                if (err) {
+                    reject(err);
+                    return;
+                }
+                const mtimeDate = new Date(mtime * 1000);
+                fsUtimes(localPath, mtimeDate, mtimeDate)
+                    .then(() => resolve())
+                    .catch(() => resolve());
+            });
+        });
+    }
+    isBinaryBuffer(buffer) {
+        const bytesToCheck = Math.min(buffer.length, 8192);
+        for (let i = 0; i < bytesToCheck; i++) {
+            if (buffer[i] === 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+    async uploadFile(localPath, remotePath) {
+        return new Promise((resolve, reject) => {
+            if (!this.sftp) {
+                return reject(new Error('SFTP not connected'));
+            }
+            fs.readFile(localPath, (readErr, data) => {
+                if (readErr) {
+                    return reject(readErr);
+                }
+                let bufferData = data;
+                if (!this.isBinaryBuffer(data)) {
+                    const textData = data.toString('utf8').replace(/\r\n/g, '\n');
+                    bufferData = Buffer.from(textData, 'utf8');
+                }
+                this.sftp.writeFile(remotePath, bufferData, (writeErr) => {
+                    if (writeErr) {
+                        return reject(writeErr);
+                    }
+                    resolve();
+                });
+            });
+        });
+    }
+    async deleteRemoteFile(remotePath) {
+        return new Promise((resolve, reject) => {
+            if (!this.sftp) {
+                reject(new Error('SFTP not connected'));
+                return;
+            }
+            this.sftp.unlink(remotePath, (err) => {
+                if (err) {
+                    reject(err);
+                    return;
+                }
+                resolve();
+            });
+        });
+    }
+    async ensureLocalDirectory(localPath) {
+        try {
+            await fsMkdir(localPath, { recursive: true });
+        }
+        catch (err) {
+            if (err.code !== 'EEXIST') {
+                throw err;
+            }
+        }
+    }
+    isDirectory(mode) {
+        return (mode & 0o170000) === 0o040000;
+    }
+    joinPosixPath(...segments) {
+        return segments.join('/').replace(/\/+/g, '/');
+    }
+    log(level, message) {
+        if (this.logger) {
+            this.logger[level](`${this.logPrefix} ${message}`);
+        }
+    }
+    async disconnect() {
+        if (this.sftp) {
+            this.sftp = null;
+        }
+        if (this.client) {
+            this.client.end();
+            this.client = null;
+        }
+        this.currentHost = null;
+        this.currentPort = null;
+        this.currentUsername = null;
+    }
+}
+exports.SFTPSyncService = SFTPSyncService;
+let sftpSyncServiceInstance = null;
+const getSFTPSyncService = () => {
+    if (!sftpSyncServiceInstance) {
+        sftpSyncServiceInstance = new SFTPSyncService();
+    }
+    return sftpSyncServiceInstance;
+};
+exports.getSFTPSyncService = getSFTPSyncService;
+const executeSFTPSync = async (config, isDryRun = true, logger) => {
+    const service = (0, exports.getSFTPSyncService)();
+    const result = await service.sync(config, isDryRun, logger);
+    return {
+        deployed: result.synced,
+        deleted: result.deleted,
+    };
+};
+exports.executeSFTPSync = executeSFTPSync;
+const disconnectSFTPSyncService = async () => {
+    if (sftpSyncServiceInstance) {
+        await sftpSyncServiceInstance.disconnect();
+        sftpSyncServiceInstance = null;
+    }
+};
+exports.disconnectSFTPSyncService = disconnectSFTPSyncService;
+//# sourceMappingURL=sftp-sync.js.map
+
+/***/ }),
+
+/***/ 54737:
 /***/ ((__unused_webpack_module, exports) => {
 
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.BatchQueueSelection = exports.SymitarAppServerFileType = exports.SymitarAppServerAction = exports.SymitarAppServerService = exports.SymitarCLIValidatePrompts = exports.SymitarCLIExecutePrompts = exports.SymitarCLIUninstallPrompts = exports.SymitarCLIInstallPrompts = exports.SymitarWorkerType = exports.SymitarFileType = exports.SymitarDirectory = exports.SymitarSyncMode = exports.SymitarSyncDirectory = exports.SymitarCLILogin = void 0;
+exports.BatchQueueSelection = exports.SymitarAppServerFileType = exports.SymitarAppServerAction = exports.SymitarAppServerService = exports.SymitarCLIValidatePrompts = exports.SymitarCLIExecutePrompts = exports.SymitarCLIUninstallPrompts = exports.SymitarCLIInstallPrompts = exports.SymitarWorkerType = exports.SymitarFileType = exports.SymitarDirectory = exports.SymitarSyncTransport = exports.SymitarSyncMode = exports.SymitarSyncDirectory = exports.SymitarCLILogin = void 0;
 var SymitarCLILogin;
 (function (SymitarCLILogin) {
     SymitarCLILogin["AIX_SHELL"] = "$ ";
@@ -7708,6 +8302,11 @@ var SymitarSyncMode;
     SymitarSyncMode["PUSH"] = "push";
     SymitarSyncMode["PULL"] = "pull";
 })(SymitarSyncMode || (exports.SymitarSyncMode = SymitarSyncMode = {}));
+var SymitarSyncTransport;
+(function (SymitarSyncTransport) {
+    SymitarSyncTransport["RSYNC"] = "rsync";
+    SymitarSyncTransport["SFTP"] = "sftp";
+})(SymitarSyncTransport || (exports.SymitarSyncTransport = SymitarSyncTransport = {}));
 var SymitarDirectory;
 (function (SymitarDirectory) {
     SymitarDirectory["REPWRITERSPECS"] = "REPWRITERSPECS";
@@ -77332,7 +77931,7 @@ TransportStream.prototype._nop = function _nop() {
 
 /***/ }),
 
-/***/ 68360:
+/***/ 45530:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
@@ -77346,23 +77945,23 @@ TransportStream.prototype._nop = function _nop() {
 
 
 const logform = __nccwpck_require__(25334);
-const { warn } = __nccwpck_require__(40590);
+const { warn } = __nccwpck_require__(90464);
 
 /**
  * Expose version. Use `require` method for `webpack` support.
  * @type {string}
  */
-exports.version = __nccwpck_require__(55001).version;
+exports.version = __nccwpck_require__(53823).version;
 /**
  * Include transports defined by default by winston
  * @type {Array}
  */
-exports.transports = __nccwpck_require__(86954);
+exports.transports = __nccwpck_require__(31764);
 /**
  * Expose utility methods
  * @type {Object}
  */
-exports.config = __nccwpck_require__(77950);
+exports.config = __nccwpck_require__(38372);
 /**
  * Hoist format-related functionality from logform.
  * @type {Object}
@@ -77377,27 +77976,27 @@ exports.format = logform.format;
  * Expose core Logging-related prototypes.
  * @type {function}
  */
-exports.createLogger = __nccwpck_require__(57652);
+exports.createLogger = __nccwpck_require__(72794);
 /**
  * Expose core Logging-related prototypes.
  * @type {function}
  */
-exports.Logger = __nccwpck_require__(77015);
+exports.Logger = __nccwpck_require__(3065);
 /**
  * Expose core Logging-related prototypes.
  * @type {Object}
  */
-exports.ExceptionHandler = __nccwpck_require__(77923);
+exports.ExceptionHandler = __nccwpck_require__(90829);
 /**
  * Expose core Logging-related prototypes.
  * @type {Object}
  */
-exports.RejectionHandler = __nccwpck_require__(77973);
+exports.RejectionHandler = __nccwpck_require__(88927);
 /**
  * Expose core Logging-related prototypes.
  * @type {Container}
  */
-exports.Container = __nccwpck_require__(83712);
+exports.Container = __nccwpck_require__(10898);
 /**
  * Expose core Logging-related prototypes.
  * @type {Object}
@@ -77531,7 +78130,7 @@ warn.forProperties(exports, 'deprecated', ['emitErrs', 'levelLength']);
 
 /***/ }),
 
-/***/ 40590:
+/***/ 90464:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
@@ -77585,7 +78184,7 @@ exports.warn = {
 
 /***/ }),
 
-/***/ 77950:
+/***/ 38372:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
@@ -77628,7 +78227,7 @@ exports.addColors = logform.levels;
 
 /***/ }),
 
-/***/ 83712:
+/***/ 10898:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -77641,7 +78240,7 @@ exports.addColors = logform.levels;
 
 
 
-const createLogger = __nccwpck_require__(57652);
+const createLogger = __nccwpck_require__(72794);
 
 /**
  * Inversion of control container for winston logger instances.
@@ -77754,7 +78353,7 @@ module.exports = class Container {
 
 /***/ }),
 
-/***/ 57652:
+/***/ 72794:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -77768,8 +78367,8 @@ module.exports = class Container {
 
 
 const { LEVEL } = __nccwpck_require__(93979);
-const config = __nccwpck_require__(77950);
-const Logger = __nccwpck_require__(77015);
+const config = __nccwpck_require__(38372);
+const Logger = __nccwpck_require__(3065);
 const debug = __nccwpck_require__(85538)('winston:create-logger');
 
 function isLevelEnabledFunctionName(level) {
@@ -77866,7 +78465,7 @@ module.exports = function (opts = {}) {
 
 /***/ }),
 
-/***/ 77923:
+/***/ 90829:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -77884,7 +78483,7 @@ const asyncForEach = __nccwpck_require__(562);
 const debug = __nccwpck_require__(85538)('winston:exception');
 const once = __nccwpck_require__(82020);
 const stackTrace = __nccwpck_require__(92774);
-const ExceptionStream = __nccwpck_require__(65295);
+const ExceptionStream = __nccwpck_require__(99469);
 
 /**
  * Object for handling uncaughtException events.
@@ -78119,7 +78718,7 @@ module.exports = class ExceptionHandler {
 
 /***/ }),
 
-/***/ 65295:
+/***/ 99469:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -78181,7 +78780,7 @@ module.exports = class ExceptionStream extends Writable {
 
 /***/ }),
 
-/***/ 77015:
+/***/ 3065:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -78198,12 +78797,12 @@ const { Stream, Transform } = __nccwpck_require__(45336);
 const asyncForEach = __nccwpck_require__(562);
 const { LEVEL, SPLAT } = __nccwpck_require__(93979);
 const isStream = __nccwpck_require__(82198);
-const ExceptionHandler = __nccwpck_require__(77923);
-const RejectionHandler = __nccwpck_require__(77973);
+const ExceptionHandler = __nccwpck_require__(90829);
+const RejectionHandler = __nccwpck_require__(88927);
 const LegacyTransportStream = __nccwpck_require__(16395);
-const Profiler = __nccwpck_require__(15154);
-const { warn } = __nccwpck_require__(40590);
-const config = __nccwpck_require__(77950);
+const Profiler = __nccwpck_require__(93980);
+const { warn } = __nccwpck_require__(90464);
+const config = __nccwpck_require__(38372);
 
 /**
  * Captures the number of format (i.e. %s strings) in a given string.
@@ -78249,6 +78848,7 @@ class Logger extends Transform {
           if (info instanceof Error) {
             infoClone.stack = info.stack;
             infoClone.message = info.message;
+            infoClone.cause = info.cause;
           }
 
           logger.write(infoClone);
@@ -78888,7 +79488,7 @@ module.exports = Logger;
 
 /***/ }),
 
-/***/ 15154:
+/***/ 93980:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -78914,7 +79514,7 @@ class Profiler {
    * @private
    */
   constructor(logger) {
-    const Logger = __nccwpck_require__(77015);
+    const Logger = __nccwpck_require__(3065);
     if (typeof logger !== 'object' || Array.isArray(logger) || !(logger instanceof Logger)) {
       throw new Error('Logger is required for profiling');
     } else {
@@ -78942,14 +79542,14 @@ class Profiler {
 
     return this.logger.write(info);
   }
-};
+}
 
 module.exports = Profiler;
 
 
 /***/ }),
 
-/***/ 77973:
+/***/ 88927:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -78967,7 +79567,7 @@ const asyncForEach = __nccwpck_require__(562);
 const debug = __nccwpck_require__(85538)('winston:rejection');
 const once = __nccwpck_require__(82020);
 const stackTrace = __nccwpck_require__(92774);
-const RejectionStream = __nccwpck_require__(98917);
+const RejectionStream = __nccwpck_require__(44107);
 
 /**
  * Object for handling unhandledRejection events.
@@ -79208,7 +79808,7 @@ module.exports = class RejectionHandler {
 
 /***/ }),
 
-/***/ 98917:
+/***/ 44107:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -79268,7 +79868,7 @@ module.exports = class RejectionStream extends Writable {
 
 /***/ }),
 
-/***/ 63772:
+/***/ 21206:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -79400,7 +80000,7 @@ module.exports = (options, iter) => {
 
 /***/ }),
 
-/***/ 88063:
+/***/ 35377:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -79533,7 +80133,7 @@ module.exports = class Console extends TransportStream {
 
 /***/ }),
 
-/***/ 76622:
+/***/ 95852:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -79556,7 +80156,7 @@ const { Stream, PassThrough } = __nccwpck_require__(45336);
 const TransportStream = __nccwpck_require__(74826);
 const debug = __nccwpck_require__(85538)('winston:file');
 const os = __nccwpck_require__(70857);
-const tailFile = __nccwpck_require__(63772);
+const tailFile = __nccwpck_require__(21206);
 
 /**
  * Transport for outputting to a local log file.
@@ -79646,6 +80246,38 @@ module.exports = class File extends TransportStream {
         setImmediate(() => this._stream.end());
       }
     }
+  }
+
+  /**
+   * Called by Node.js Writable stream before emitting 'finish'.
+   * Ensures all buffered data is flushed to the underlying file stream
+   * before the transport signals completion.
+   * @param {Function} callback - Callback to signal completion.
+   * @private
+   */
+  _final(callback) {
+    // If still opening, wait for the file to be opened first
+    if (this._opening) {
+      this.once('open', () => this._final(callback));
+      return;
+    }
+
+    // End the PassThrough stream
+    this._stream.end();
+
+    // No destination stream, call callback immediately
+    if (!this._dest) {
+      return callback();
+    }
+
+    // Destination is already finished
+    if (this._dest.writableFinished) {
+      return callback();
+    }
+
+    // Wait for destination stream to finish writing
+    this._dest.once('finish', callback);
+    this._dest.once('error', callback);
   }
 
   /**
@@ -80304,7 +80936,7 @@ module.exports = class File extends TransportStream {
 
 /***/ }),
 
-/***/ 6080:
+/***/ 5962:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -80574,7 +81206,7 @@ module.exports = class Http extends TransportStream {
 
 /***/ }),
 
-/***/ 86954:
+/***/ 31764:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
@@ -80595,7 +81227,7 @@ Object.defineProperty(exports, "Console", ({
   configurable: true,
   enumerable: true,
   get() {
-    return __nccwpck_require__(88063);
+    return __nccwpck_require__(35377);
   }
 }));
 
@@ -80607,7 +81239,7 @@ Object.defineProperty(exports, "File", ({
   configurable: true,
   enumerable: true,
   get() {
-    return __nccwpck_require__(76622);
+    return __nccwpck_require__(95852);
   }
 }));
 
@@ -80619,7 +81251,7 @@ Object.defineProperty(exports, "Http", ({
   configurable: true,
   enumerable: true,
   get() {
-    return __nccwpck_require__(6080);
+    return __nccwpck_require__(5962);
   }
 }));
 
@@ -80631,14 +81263,14 @@ Object.defineProperty(exports, "Stream", ({
   configurable: true,
   enumerable: true,
   get() {
-    return __nccwpck_require__(31280);
+    return __nccwpck_require__(84874);
   }
 }));
 
 
 /***/ }),
 
-/***/ 31280:
+/***/ 84874:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -85694,7 +86326,7 @@ exports.getDirectoryConfig = getDirectoryConfig;
 exports.getLocalDirectoryPath = getLocalDirectoryPath;
 exports.getInstallList = getInstallList;
 exports.calculateTotalChanges = calculateTotalChanges;
-const symitar_1 = __nccwpck_require__(18257);
+const symitar_1 = __nccwpck_require__(55696);
 /**
  * Configuration mapping for all supported directory types
  */
@@ -85842,6 +86474,8 @@ async function run() {
         const apiKey = core.getInput('api-key', { required: true });
         const installPowerOnListInput = core.getInput('install-poweron-list', { required: false }) || '';
         const validateIgnoreListInput = core.getInput('validate-ignore-list', { required: false }) || '';
+        const syncMethodInput = core.getInput('sync-method', { required: false }) || 'sftp';
+        const sftpConcurrencyInput = core.getInput('sftp-concurrency', { required: false }) || '4';
         const debug = core.getInput('debug', { required: false }) === 'true';
         // Mask sensitive information
         core.setSecret(apiKey);
@@ -85859,6 +86493,16 @@ async function run() {
         // Validate sync mode
         if (syncMode !== 'push' && syncMode !== 'pull' && syncMode !== 'mirror') {
             throw new Error(`Invalid sync mode: ${syncMode}. Must be 'push', 'pull', or 'mirror'`);
+        }
+        // Validate sync method
+        if (syncMethodInput !== 'sftp' && syncMethodInput !== 'rsync') {
+            throw new Error(`Invalid sync method: ${syncMethodInput}. Must be 'sftp' or 'rsync'`);
+        }
+        const syncMethod = syncMethodInput;
+        // Validate and parse SFTP concurrency
+        const sftpConcurrency = parseInt(sftpConcurrencyInput, 10);
+        if (isNaN(sftpConcurrency) || sftpConcurrency < 1 || sftpConcurrency > 20) {
+            throw new Error(`Invalid SFTP concurrency: ${sftpConcurrencyInput}. Must be between 1-20`);
         }
         // Validate hostname format
         if (!symitarHostname.match(/^[a-zA-Z0-9.-]+$/)) {
@@ -85903,6 +86547,10 @@ async function run() {
         core.info(`${logPrefix} Directory Type: ${directoryConfig.name}`);
         core.info(`${logPrefix} Connection Type: ${connectionType.toUpperCase()}`);
         core.info(`${logPrefix} Sync Mode: ${syncMode}`);
+        core.info(`${logPrefix} Sync Method: ${syncMethod.toUpperCase()}`);
+        if (syncMethod === 'sftp') {
+            core.info(`${logPrefix} SFTP Concurrency: ${sftpConcurrency}`);
+        }
         core.info(`${logPrefix} Hostname: ${symitarHostname}`);
         if (connectionType === 'https') {
             core.info(`${logPrefix} Symitar App Port: ${symitarAppPort}`);
@@ -85937,6 +86585,8 @@ async function run() {
             directoryType,
             connectionType,
             syncMode,
+            syncMethod,
+            sftpConcurrency,
             isDryRun,
             installPowerOnList,
             validateIgnoreList,
@@ -86232,7 +86882,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.synchronizeToSymitar = synchronizeToSymitar;
 const core = __importStar(__nccwpck_require__(16966));
-const symitar_1 = __nccwpck_require__(18257);
+const symitar_1 = __nccwpck_require__(55696);
 const subscription_1 = __nccwpck_require__(14565);
 const directory_config_1 = __nccwpck_require__(84260);
 /**
@@ -86251,6 +86901,19 @@ function getSyncMode(mode) {
     }
 }
 /**
+ * Maps our sync method string to the Symitar transport enum
+ */
+function getSyncTransport(method) {
+    switch (method) {
+        case 'sftp':
+            return symitar_1.SymitarSyncTransport.SFTP;
+        case 'rsync':
+            return symitar_1.SymitarSyncTransport.RSYNC;
+        default:
+            throw new Error(`Invalid sync method: ${method}`);
+    }
+}
+/**
  * Synchronize files to a Symitar server using HTTPS or SSH.
  */
 async function synchronizeToSymitar(config) {
@@ -86263,30 +86926,45 @@ async function synchronizeToSymitar(config) {
     const installList = (0, directory_config_1.getInstallList)(config.directoryType, config.installPowerOnList);
     // Get sync mode enum
     const syncMode = getSyncMode(config.syncMode);
+    // Get sync transport
+    const syncTransport = getSyncTransport(config.syncMethod);
+    // Build sync options
+    const syncOptions = {
+        transport: syncTransport,
+        concurrency: config.sftpConcurrency,
+        powerOn: {
+            installList,
+            validateIgnoreList: config.validateIgnoreList,
+        },
+    };
     core.info(`${logPrefix} Using ${config.connectionType.toUpperCase()} connection`);
+    core.info(`${logPrefix} Sync method: ${config.syncMethod.toUpperCase()}`);
+    if (config.syncMethod === 'sftp') {
+        core.info(`${logPrefix} SFTP concurrency: ${config.sftpConcurrency}`);
+    }
     core.info(`${logPrefix} Beginning ${config.syncMode} synchronization of ${directoryConfig.name} for Sym ${config.symNumber}${config.isDryRun ? ' (Dry Run)' : ''}`);
     let result;
     if (config.connectionType === 'https') {
-        result = await synchronizeViaHTTPs(config, directoryConfig.symitarDirectory, syncMode, installList);
+        result = await synchronizeViaHTTPs(config, directoryConfig.symitarDirectory, syncMode, syncOptions);
     }
     else {
-        result = await synchronizeViaSSH(config, directoryConfig.symitarDirectory, syncMode, installList);
+        result = await synchronizeViaSSH(config, directoryConfig.symitarDirectory, syncMode, syncOptions);
     }
     return {
-        filesDeployed: result.deployed.length,
+        filesDeployed: result.synced.length,
         filesDeleted: result.deleted.length,
-        filesInstalled: result.installed.length,
-        filesUninstalled: result.uninstalled.length,
-        deployedFiles: result.deployed,
+        filesInstalled: result.installed?.length ?? 0,
+        filesUninstalled: result.uninstalled?.length ?? 0,
+        deployedFiles: result.synced,
         deletedFiles: result.deleted,
-        installedFiles: result.installed,
-        uninstalledFiles: result.uninstalled,
+        installedFiles: result.installed ?? [],
+        uninstalledFiles: result.uninstalled ?? [],
     };
 }
 /**
  * Synchronize using HTTPS connection
  */
-async function synchronizeViaHTTPs(config, symitarDirectory, syncMode, installList) {
+async function synchronizeViaHTTPs(config, symitarDirectory, syncMode, syncOptions) {
     const { logPrefix } = config;
     if (!config.symitarAppPort) {
         throw new Error('symitar-app-port is required when using HTTPS connection');
@@ -86307,7 +86985,7 @@ async function synchronizeViaHTTPs(config, symitarDirectory, syncMode, installLi
     const client = new symitar_1.SymitarHTTPs(baseUrl, symitarConfig, logLevel, sshConfig);
     try {
         core.info(`${logPrefix} Starting synchronization${config.isDryRun ? ' (DRY RUN)' : ''}...`);
-        const result = await client.synchronizeFiles(config.localDirectoryPath, installList, config.isDryRun, symitarDirectory, syncMode, config.validateIgnoreList);
+        const result = await client.syncFiles(config.localDirectoryPath, symitarDirectory, syncMode, syncOptions, config.isDryRun);
         return result;
     }
     finally {
@@ -86318,7 +86996,7 @@ async function synchronizeViaHTTPs(config, symitarDirectory, syncMode, installLi
 /**
  * Synchronize using SSH connection
  */
-async function synchronizeViaSSH(config, symitarDirectory, syncMode, installList) {
+async function synchronizeViaSSH(config, symitarDirectory, syncMode, syncOptions) {
     const { logPrefix } = config;
     core.info(`${logPrefix} Connecting to ${config.symitarHostname}:${config.sshPort} via SSH...`);
     const logLevel = config.debug ? 'debug' : 'warn';
@@ -86337,7 +87015,7 @@ async function synchronizeViaSSH(config, symitarDirectory, syncMode, installList
             symitarUserNumber: config.symitarUserNumber,
             symitarUserPassword: config.symitarUserPassword,
         };
-        const result = await client.synchronizeFiles(symitarConfig, config.localDirectoryPath, installList, config.isDryRun, symitarDirectory, syncMode, config.validateIgnoreList);
+        const result = await client.syncFiles(symitarConfig, config.localDirectoryPath, symitarDirectory, syncMode, syncOptions, config.isDryRun);
         return result;
     }
     finally {
@@ -93536,11 +94214,11 @@ module.exports = {"rE":"1.17.0"};
 
 /***/ }),
 
-/***/ 55001:
+/***/ 53823:
 /***/ ((module) => {
 
 "use strict";
-module.exports = {"version":"3.18.3"};
+module.exports = {"version":"3.19.0"};
 
 /***/ }),
 
@@ -93548,7 +94226,7 @@ module.exports = {"version":"3.18.3"};
 /***/ ((module) => {
 
 "use strict";
-module.exports = /*#__PURE__*/JSON.parse('{"name":"synchronize-symitar-action","version":"1.0.7","description":"GitHub Action to synchronize a directory on the Jack Henry™ credit union core platform","main":"src/main.ts","scripts":{"build":"ncc build src/main.ts -o dist --source-map --license licenses.txt && rm -f dist/*.d.ts dist/*.d.ts.map dist/pagent.exe && rm -rf dist/build dist/lib","test":"jest --coverage","lint":"eslint --cache --quiet && prettier --check \'src/**/*.ts\' \'__tests__/**/*.ts\'","lint:fix":"eslint --cache --quiet --fix && prettier --write \'src/**/*.ts\' \'__tests__/**/*.ts\'","all":"pnpm lint:fix && pnpm build && pnpm test"},"repository":{"type":"git","url":"git+https://github.com/libum-llc/synchronize-symitar-action.git"},"keywords":["poweron","jack henry","symitar","episys","rsync","synchronize","github-action"],"author":"Libum, LLC","license":"MIT","dependencies":{"@actions/core":"^1.10.1","@actions/exec":"^1.1.1","@actions/github":"^6.0.0","@libum-llc/symitar":"0.8.1"},"devDependencies":{"@types/jest":"^29.5.12","@types/node":"^20.11.0","@typescript-eslint/eslint-plugin":"^6.19.0","@typescript-eslint/parser":"^6.19.0","@vercel/ncc":"^0.38.1","eslint":"^8.56.0","eslint-plugin-github":"^4.10.1","jest":"^29.7.0","prettier":"^3.2.4","ts-jest":"^29.1.2","ts-node":"^10.9.2","typescript":"^5.3.3"}}');
+module.exports = /*#__PURE__*/JSON.parse('{"name":"synchronize-symitar-action","version":"1.0.8","description":"GitHub Action to synchronize a directory on the Jack Henry™ credit union core platform","main":"src/main.ts","scripts":{"build":"ncc build src/main.ts -o dist --source-map --license licenses.txt && rm -f dist/*.d.ts dist/*.d.ts.map dist/pagent.exe && rm -rf dist/build dist/lib","test":"jest --coverage","lint":"eslint --cache --quiet && prettier --check \'src/**/*.ts\' \'__tests__/**/*.ts\'","lint:fix":"eslint --cache --quiet --fix && prettier --write \'src/**/*.ts\' \'__tests__/**/*.ts\'","all":"pnpm lint:fix && pnpm build && pnpm test"},"repository":{"type":"git","url":"git+https://github.com/libum-llc/synchronize-symitar-action.git"},"keywords":["poweron","jack henry","symitar","episys","rsync","synchronize","github-action"],"author":"Libum, LLC","license":"MIT","dependencies":{"@actions/core":"^1.10.1","@actions/exec":"^1.1.1","@actions/github":"^6.0.0","@libum-llc/symitar":"0.9.1"},"devDependencies":{"@types/jest":"^29.5.12","@types/node":"^20.11.0","@typescript-eslint/eslint-plugin":"^6.19.0","@typescript-eslint/parser":"^6.19.0","@vercel/ncc":"^0.38.1","eslint":"^8.56.0","eslint-plugin-github":"^4.10.1","jest":"^29.7.0","prettier":"^3.2.4","ts-jest":"^29.1.2","ts-node":"^10.9.2","typescript":"^5.3.3"}}');
 
 /***/ })
 
