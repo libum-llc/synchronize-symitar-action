@@ -30,7 +30,7 @@ pnpm test -- __tests__/synchronize.test.ts
 - `src/directory-config.ts` - Directory type configuration mapping (powerOns→REPWRITERSPECS, letterFiles→LETTERSPECS, etc.)
 - `src/subscription.ts` - API key validation against Libum license server with retry logic
 
-**Key Dependency**: `@libum-llc/symitar` (v0.9.1) provides `SymitarHTTPs` and `SymitarSSH` clients with `syncFiles()` method for file synchronization.
+**Key Dependency**: `@libum-llc/symitar` (v1.0.4) provides `SymitarHTTPs` and `SymitarSSH` clients with `syncFiles()` method for file synchronization.
 
 **Client Log Levels**: Clients are initialized with `'warn'` log level by default, `'debug'` when debug input is enabled.
 
