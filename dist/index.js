@@ -90107,7 +90107,7 @@ async function run() {
         const symNumberInput = core.getInput('sym-number', { required: true });
         const symitarUserNumber = core.getInput('symitar-user-number', { required: true });
         const symitarUserPassword = core.getInput('symitar-user-password', { required: true });
-        const apiKey = core.getInput('api-key', { required: true });
+        const apiKey = core.getInput('api-key', { required: true }).trim();
         const installPowerOnListInput = core.getInput('install-poweron-list', { required: false }) || '';
         const validateIgnoreListInput = core.getInput('validate-ignore-list', { required: false }) || '';
         const syncMethodInput = core.getInput('sync-method', { required: false }) || 'sftp';
@@ -90413,10 +90413,11 @@ exports.ConnectionError = ConnectionError;
  */
 const validateApiKey = async (apiKey) => {
     const logPrefix = '[ValidateSubscription]';
+    const normalizedApiKey = apiKey.trim();
     console.info(`${logPrefix} Validating API key`);
-    if (!apiKey || !apiKey.trim()) {
-        console.error(`${logPrefix} No API key provided. Please make sure 'apiKey' is set properly in your workflow.`);
-        throw new AuthenticationError('PowerOn Pipelines API Key is missing', apiKey, '');
+    if (!normalizedApiKey) {
+        console.error(`${logPrefix} No API key provided. Please make sure 'api-key' is set properly in your workflow.`);
+        throw new AuthenticationError('PowerOn Pipelines API Key is missing', normalizedApiKey, '');
     }
     const url = `https://${sstStagePrefix}license${isSandbox ? '.libum-sandbox' : ''}.libum.io/subscriptionsByApiKey?product=poweron-pipelines`;
     for (let attempt = 1; attempt <= MAX_API_RETRIES; attempt++) {
@@ -90426,25 +90427,25 @@ const validateApiKey = async (apiKey) => {
             const response = await fetch(url, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-API-Key': apiKey,
+                    'X-API-Key': normalizedApiKey,
                 },
                 signal: controller.signal,
                 method: 'GET',
             });
             if (!response.ok) {
                 console.error(`${logPrefix} Failed to validate API key. Status: ${response.status}, Message: ${response.statusText}`);
-                throw new AuthenticationError(`Failed to validate API key: ${response.status} ${response.statusText}`, apiKey, '');
+                throw new AuthenticationError(`Failed to validate API key: ${response.status} ${response.statusText}`, normalizedApiKey, '');
             }
             const data = await response.json();
             // Validate response structure with type guard
             if (!isSubscriptionResponse(data)) {
-                throw new AuthenticationError('Invalid response format from license server', apiKey, '');
+                throw new AuthenticationError('Invalid response format from license server', normalizedApiKey, '');
             }
             if (!data.isFound) {
-                throw new AuthenticationError(`Provided API key was not found. Please make sure 'apiKey' is set properly in your workflow.`, apiKey, '');
+                throw new AuthenticationError(`Provided API key was not found. Please make sure 'api-key' is set properly in your workflow.`, normalizedApiKey, '');
             }
             if (data.subscriptions.length === 0) {
-                throw new AuthenticationError(`No active subscription found for the provided API key.`, apiKey, '');
+                throw new AuthenticationError(`No active subscription found for the provided API key.`, normalizedApiKey, '');
             }
             console.info(`${logPrefix} API key validation successful`);
             return;
@@ -97862,7 +97863,7 @@ module.exports = {"version":"3.19.0"};
 /***/ ((module) => {
 
 "use strict";
-module.exports = /*#__PURE__*/JSON.parse('{"name":"synchronize-symitar-action","version":"1.1.0","description":"GitHub Action to synchronize a directory on the Jack Henry™ credit union core platform","main":"src/main.ts","scripts":{"build":"ncc build src/main.ts -o dist --source-map --license licenses.txt && rm -f dist/*.d.ts dist/*.d.ts.map dist/pagent.exe && rm -rf dist/build dist/lib","test":"jest --coverage","lint":"eslint --cache --quiet && prettier --check \'src/**/*.ts\' \'__tests__/**/*.ts\'","lint:fix":"eslint --cache --quiet --fix && prettier --write \'src/**/*.ts\' \'__tests__/**/*.ts\'","all":"pnpm lint:fix && pnpm build && pnpm test"},"repository":{"type":"git","url":"git+https://github.com/libum-llc/synchronize-symitar-action.git"},"keywords":["poweron","jack henry","symitar","episys","rsync","synchronize","github-action"],"author":"Libum, LLC","license":"MIT","dependencies":{"@actions/core":"^1.10.1","@actions/exec":"^1.1.1","@actions/github":"^6.0.0","@libum-llc/symitar":"1.4.0"},"devDependencies":{"@types/jest":"^29.5.12","@types/node":"^20.11.0","@typescript-eslint/eslint-plugin":"^6.19.0","@typescript-eslint/parser":"^6.19.0","@vercel/ncc":"^0.38.1","eslint":"^8.56.0","eslint-plugin-github":"^4.10.1","jest":"^29.7.0","prettier":"^3.2.4","ts-jest":"^29.1.2","ts-node":"^10.9.2","typescript":"^5.3.3"}}');
+module.exports = /*#__PURE__*/JSON.parse('{"name":"synchronize-symitar-action","version":"1.1.1","description":"GitHub Action to synchronize a directory on the Jack Henry™ credit union core platform","main":"src/main.ts","scripts":{"build":"ncc build src/main.ts -o dist --source-map --license licenses.txt && rm -f dist/*.d.ts dist/*.d.ts.map dist/pagent.exe && rm -rf dist/build dist/lib","test":"jest --coverage","lint":"eslint --cache --quiet && prettier --check \'src/**/*.ts\' \'__tests__/**/*.ts\'","lint:fix":"eslint --cache --quiet --fix && prettier --write \'src/**/*.ts\' \'__tests__/**/*.ts\'","all":"pnpm lint:fix && pnpm build && pnpm test"},"repository":{"type":"git","url":"git+https://github.com/libum-llc/synchronize-symitar-action.git"},"keywords":["poweron","jack henry","symitar","episys","rsync","synchronize","github-action"],"author":"Libum, LLC","license":"MIT","dependencies":{"@actions/core":"^1.10.1","@actions/exec":"^1.1.1","@actions/github":"^6.0.0","@libum-llc/symitar":"1.4.0"},"devDependencies":{"@types/jest":"^29.5.12","@types/node":"^20.11.0","@typescript-eslint/eslint-plugin":"^6.19.0","@typescript-eslint/parser":"^6.19.0","@vercel/ncc":"^0.38.1","eslint":"^8.56.0","eslint-plugin-github":"^4.10.1","jest":"^29.7.0","prettier":"^3.2.4","ts-jest":"^29.1.2","ts-node":"^10.9.2","typescript":"^5.3.3"}}');
 
 /***/ })
 

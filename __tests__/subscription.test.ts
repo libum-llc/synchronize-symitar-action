@@ -30,6 +30,27 @@ describe('subscription', () => {
       await expect(validateApiKey('valid-api-key')).resolves.not.toThrow();
     });
 
+    it('should trim surrounding whitespace from API key before validation', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          isFound: true,
+          subscriptions: [{ id: '123', status: 'active' }],
+        }),
+      });
+
+      await expect(validateApiKey('  valid-api-key  ')).resolves.not.toThrow();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'X-API-Key': 'valid-api-key',
+          }),
+        }),
+      );
+    });
+
     it('should throw AuthenticationError when API key is not found', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,

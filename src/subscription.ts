@@ -90,13 +90,14 @@ export class ConnectionError extends Error {
  */
 export const validateApiKey = async (apiKey: string): Promise<void> => {
   const logPrefix = '[ValidateSubscription]';
+  const normalizedApiKey = apiKey.trim();
   console.info(`${logPrefix} Validating API key`);
 
-  if (!apiKey || !apiKey.trim()) {
+  if (!normalizedApiKey) {
     console.error(
-      `${logPrefix} No API key provided. Please make sure 'apiKey' is set properly in your workflow.`,
+      `${logPrefix} No API key provided. Please make sure 'api-key' is set properly in your workflow.`,
     );
-    throw new AuthenticationError('PowerOn Pipelines API Key is missing', apiKey, '');
+    throw new AuthenticationError('PowerOn Pipelines API Key is missing', normalizedApiKey, '');
   }
 
   const url = `https://${sstStagePrefix}license${isSandbox ? '.libum-sandbox' : ''}.libum.io/subscriptionsByApiKey?product=poweron-pipelines`;
@@ -109,7 +110,7 @@ export const validateApiKey = async (apiKey: string): Promise<void> => {
       const response = await fetch(url, {
         headers: {
           'Content-Type': 'application/json',
-          'X-API-Key': apiKey,
+          'X-API-Key': normalizedApiKey,
         },
         signal: controller.signal,
         method: 'GET',
@@ -121,7 +122,7 @@ export const validateApiKey = async (apiKey: string): Promise<void> => {
         );
         throw new AuthenticationError(
           `Failed to validate API key: ${response.status} ${response.statusText}`,
-          apiKey,
+          normalizedApiKey,
           '',
         );
       }
@@ -130,13 +131,17 @@ export const validateApiKey = async (apiKey: string): Promise<void> => {
 
       // Validate response structure with type guard
       if (!isSubscriptionResponse(data)) {
-        throw new AuthenticationError('Invalid response format from license server', apiKey, '');
+        throw new AuthenticationError(
+          'Invalid response format from license server',
+          normalizedApiKey,
+          '',
+        );
       }
 
       if (!data.isFound) {
         throw new AuthenticationError(
-          `Provided API key was not found. Please make sure 'apiKey' is set properly in your workflow.`,
-          apiKey,
+          `Provided API key was not found. Please make sure 'api-key' is set properly in your workflow.`,
+          normalizedApiKey,
           '',
         );
       }
@@ -144,7 +149,7 @@ export const validateApiKey = async (apiKey: string): Promise<void> => {
       if (data.subscriptions.length === 0) {
         throw new AuthenticationError(
           `No active subscription found for the provided API key.`,
-          apiKey,
+          normalizedApiKey,
           '',
         );
       }

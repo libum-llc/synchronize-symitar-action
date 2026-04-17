@@ -28,7 +28,7 @@ export async function run(): Promise<void> {
     const symNumberInput = core.getInput('sym-number', { required: true });
     const symitarUserNumber = core.getInput('symitar-user-number', { required: true });
     const symitarUserPassword = core.getInput('symitar-user-password', { required: true });
-    const apiKey = core.getInput('api-key', { required: true });
+    const apiKey = core.getInput('api-key', { required: true }).trim();
     const installPowerOnListInput =
       core.getInput('install-poweron-list', { required: false }) || '';
     const validateIgnoreListInput =
