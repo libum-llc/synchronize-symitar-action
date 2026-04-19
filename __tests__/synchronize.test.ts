@@ -140,6 +140,7 @@ describe('synchronize', () => {
         {
           transport: 'sftp',
           concurrency: 4,
+          onProgress: expect.any(Function),
           powerOn: {
             installList: ['FILE1.PO'],
             validateIgnoreList: [],
@@ -157,7 +158,9 @@ describe('synchronize', () => {
         expect.anything(),
         expect.anything(),
         expect.anything(),
-        expect.anything(),
+        expect.objectContaining({
+          onProgress: expect.any(Function),
+        }),
         true,
       );
     });
@@ -171,6 +174,7 @@ describe('synchronize', () => {
         expect.anything(),
         expect.anything(),
         expect.objectContaining({
+          onProgress: expect.any(Function),
           powerOn: expect.objectContaining({
             validateIgnoreList: ['TEST.PO'],
           }),
@@ -188,6 +192,7 @@ describe('synchronize', () => {
         expect.anything(),
         expect.anything(),
         expect.objectContaining({
+          onProgress: expect.any(Function),
           transport: 'rsync',
         }),
         expect.anything(),
@@ -204,6 +209,7 @@ describe('synchronize', () => {
         expect.anything(),
         expect.objectContaining({
           concurrency: 8,
+          onProgress: expect.any(Function),
         }),
         expect.anything(),
       );
@@ -263,6 +269,7 @@ describe('synchronize', () => {
         {
           transport: 'sftp',
           concurrency: 4,
+          onProgress: expect.any(Function),
           powerOn: {
             installList: ['FILE1.PO'],
             validateIgnoreList: [],
@@ -352,6 +359,39 @@ describe('synchronize', () => {
 
       expect(mockedCore.info).toHaveBeenCalledWith(expect.stringContaining('push'));
       expect(mockedCore.info).toHaveBeenCalledWith(expect.stringContaining('PowerOns'));
+    });
+
+    it('should log sync progress updates from the library callback', async () => {
+      mockSSHSyncFiles.mockImplementation(
+        async (
+          _symitarConfig,
+          _localDirectory,
+          _remoteDirectory,
+          _syncMode,
+          syncOptions,
+        ) => {
+          syncOptions.onProgress?.({ phase: 'connecting', current: 0, total: 0 });
+          syncOptions.onProgress?.({ phase: 'scanning', current: 0, total: 0 });
+          syncOptions.onProgress?.({
+            phase: 'syncing',
+            current: 1,
+            total: 3,
+            currentFile: 'FILE1.PO',
+          });
+          syncOptions.onProgress?.({ phase: 'complete', current: 3, total: 3 });
+
+          return defaultSyncResult;
+        },
+      );
+
+      await synchronizeToSymitar(defaultConfig);
+
+      expect(mockedCore.info).toHaveBeenCalledWith('[Test] Progress: connecting');
+      expect(mockedCore.info).toHaveBeenCalledWith('[Test] Progress: scanning');
+      expect(mockedCore.info).toHaveBeenCalledWith(
+        '[Test] Progress: syncing 1/3 (FILE1.PO)',
+      );
+      expect(mockedCore.info).toHaveBeenCalledWith('[Test] Progress: complete 3/3');
     });
   });
 });

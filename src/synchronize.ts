@@ -5,6 +5,7 @@ import {
   SymitarSyncDirectory,
   SymitarSyncMode,
   SymitarSyncTransport,
+  SyncFilesProgress,
   SyncFilesOptions,
   SyncFilesResult,
 } from '@libum-llc/symitar';
@@ -47,6 +48,27 @@ export interface SynchronizeResult {
   deletedFiles: string[];
   installedFiles: string[];
   uninstalledFiles: string[];
+}
+
+function createProgressCallback(logPrefix: string): (progress: SyncFilesProgress) => void {
+  let lastMessage = '';
+
+  return (progress: SyncFilesProgress) => {
+    let message: string;
+
+    if (progress.currentFile && progress.total > 0) {
+      message = `${logPrefix} Progress: ${progress.phase} ${progress.current}/${progress.total} (${progress.currentFile})`;
+    } else if (progress.total > 0) {
+      message = `${logPrefix} Progress: ${progress.phase} ${progress.current}/${progress.total}`;
+    } else {
+      message = `${logPrefix} Progress: ${progress.phase}`;
+    }
+
+    if (message !== lastMessage) {
+      core.info(message);
+      lastMessage = message;
+    }
+  };
 }
 
 /**
@@ -104,6 +126,7 @@ export async function synchronizeToSymitar(config: SynchronizeConfig): Promise<S
   const syncOptions: SyncFilesOptions = {
     transport: syncTransport,
     concurrency: config.sftpConcurrency,
+    onProgress: createProgressCallback(logPrefix),
     powerOn: {
       installList,
       validateIgnoreList: config.validateIgnoreList,
