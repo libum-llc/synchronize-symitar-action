@@ -54,14 +54,15 @@ function createProgressCallback(logPrefix: string): (progress: SyncFilesProgress
   let lastMessage = '';
 
   return (progress: SyncFilesProgress) => {
+    const phase = progress.phase.charAt(0).toUpperCase() + progress.phase.slice(1);
     let message: string;
 
     if (progress.currentFile && progress.total > 0) {
-      message = `${logPrefix} Progress: ${progress.phase} ${progress.current}/${progress.total} (${progress.currentFile})`;
+      message = `${logPrefix} ${phase} ${progress.current}/${progress.total} (${progress.currentFile})`;
     } else if (progress.total > 0) {
-      message = `${logPrefix} Progress: ${progress.phase} ${progress.current}/${progress.total}`;
+      message = `${logPrefix} ${phase} ${progress.current}/${progress.total}`;
     } else {
-      message = `${logPrefix} Progress: ${progress.phase}`;
+      message = `${logPrefix} ${phase}`;
     }
 
     if (message !== lastMessage) {

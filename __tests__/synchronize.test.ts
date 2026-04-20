@@ -380,10 +380,10 @@ describe('synchronize', () => {
 
       await synchronizeToSymitar(defaultConfig);
 
-      expect(mockedCore.info).toHaveBeenCalledWith('[Test] Progress: connecting');
-      expect(mockedCore.info).toHaveBeenCalledWith('[Test] Progress: scanning');
-      expect(mockedCore.info).toHaveBeenCalledWith('[Test] Progress: syncing 1/3 (FILE1.PO)');
-      expect(mockedCore.info).toHaveBeenCalledWith('[Test] Progress: complete 3/3');
+      expect(mockedCore.info).toHaveBeenCalledWith('[Test] Connecting');
+      expect(mockedCore.info).toHaveBeenCalledWith('[Test] Scanning');
+      expect(mockedCore.info).toHaveBeenCalledWith('[Test] Syncing 1/3 (FILE1.PO)');
+      expect(mockedCore.info).toHaveBeenCalledWith('[Test] Complete 3/3');
     });
   });
 });
