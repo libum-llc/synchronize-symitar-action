@@ -363,13 +363,7 @@ describe('synchronize', () => {
 
     it('should log sync progress updates from the library callback', async () => {
       mockSSHSyncFiles.mockImplementation(
-        async (
-          _symitarConfig,
-          _localDirectory,
-          _remoteDirectory,
-          _syncMode,
-          syncOptions,
-        ) => {
+        async (_symitarConfig, _localDirectory, _remoteDirectory, _syncMode, syncOptions) => {
           syncOptions.onProgress?.({ phase: 'connecting', current: 0, total: 0 });
           syncOptions.onProgress?.({ phase: 'scanning', current: 0, total: 0 });
           syncOptions.onProgress?.({
@@ -388,9 +382,7 @@ describe('synchronize', () => {
 
       expect(mockedCore.info).toHaveBeenCalledWith('[Test] Progress: connecting');
       expect(mockedCore.info).toHaveBeenCalledWith('[Test] Progress: scanning');
-      expect(mockedCore.info).toHaveBeenCalledWith(
-        '[Test] Progress: syncing 1/3 (FILE1.PO)',
-      );
+      expect(mockedCore.info).toHaveBeenCalledWith('[Test] Progress: syncing 1/3 (FILE1.PO)');
       expect(mockedCore.info).toHaveBeenCalledWith('[Test] Progress: complete 3/3');
     });
   });
