@@ -119,7 +119,7 @@ describe('synchronize', () => {
           username: 'testuser',
           password: 'testpass',
         },
-        'warn',
+        'info',
       );
     });
 
@@ -242,7 +242,7 @@ describe('synchronize', () => {
       expect(MockedSymitarHTTPs).toHaveBeenCalledWith(
         'https://symitar.example.com:42627',
         { symNumber: 627, symitarUserNumber: '1', symitarUserPassword: 'questpass' },
-        'warn',
+        'info',
         { port: 22, username: 'testuser', password: 'testpass' },
       );
     });

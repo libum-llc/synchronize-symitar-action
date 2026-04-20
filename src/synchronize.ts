@@ -203,7 +203,7 @@ async function synchronizeViaHTTPs(
     password: config.sshPassword,
   };
 
-  const logLevel = config.debug ? 'debug' : 'warn';
+  const logLevel = config.debug ? 'debug' : 'info';
   const client = new SymitarHTTPs(baseUrl, symitarConfig, logLevel, sshConfig);
 
   try {
@@ -237,7 +237,7 @@ async function synchronizeViaSSH(
 
   core.info(`${logPrefix} Connecting to ${config.symitarHostname}:${config.sshPort} via SSH...`);
 
-  const logLevel = config.debug ? 'debug' : 'warn';
+  const logLevel = config.debug ? 'debug' : 'info';
   const client = new SymitarSSH(
     {
       host: config.symitarHostname,
