@@ -15,6 +15,8 @@ ___
   - [Using HTTPS Connection](#using-https-connection)
   - [Synchronizing Other Directory Types](#synchronizing-other-directory-types)
   - [Using Mirror Mode](#using-mirror-mode)
+  - [Preserving Server-Managed Files](#preserving-server-managed-files)
+  - [Pulling Preserved Files Back to Git](#pulling-preserved-files-back-to-git)
 - [Customizing](#customizing)
   - [Inputs](#inputs)
   - [Outputs](#outputs)
@@ -127,6 +129,66 @@ jobs:
           dry-run: false
 ```
 
+### Preserving Server-Managed Files
+
+Use `preserve-server-files` for files that are generated or forcibly updated by the server. In `push` and `mirror` mode, matched files are left unchanged on Symitar instead of being overwritten or deleted from the repository copy.
+
+```yaml
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Synchronize PowerOns while preserving server-managed files
+        uses: libum-llc/synchronize-symitar-action@v1
+        with:
+          directory-type: powerOns
+          symitar-hostname: 93.455.43.232
+          sym-number: 627
+          symitar-user-number: 1995
+          symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
+          ssh-username: libum
+          ssh-password: ${{ secrets.SSH_PASSWORD }}
+          api-key: ${{ secrets.API_KEY }}
+          sync-mode: mirror
+          dry-run: false
+          preserve-server-files: RD.*,PFR.*
+```
+
+### Pulling Preserved Files Back to Git
+
+Use `pull-preserved-only` when you want a workflow that only downloads preserved files from Symitar. If `preserve-server-files` is empty, the action exits without pulling anything.
+
+When `commit-pulled-changes` is enabled, the action commits and pushes pulled changes after synchronization. No commit or push is performed during `dry-run`.
+
+```yaml
+jobs:
+  pull-server-managed:
+    runs-on: self-hosted
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Pull server-managed PowerOns
+        uses: libum-llc/synchronize-symitar-action@v1
+        with:
+          directory-type: powerOns
+          symitar-hostname: 93.455.43.232
+          sym-number: 627
+          symitar-user-number: 1995
+          symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
+          ssh-username: libum
+          ssh-password: ${{ secrets.SSH_PASSWORD }}
+          api-key: ${{ secrets.API_KEY }}
+          sync-mode: pull
+          dry-run: false
+          preserve-server-files: RD.*,PFR.*
+          pull-preserved-only: true
+          commit-pulled-changes: true
+          commit-branch: main
+```
+
 ## Customizing
 
 ### Inputs
@@ -149,8 +211,15 @@ jobs:
 | `sync-method` | Transport method for file synchronization: `sftp` or `rsync` | No | `sftp` |
 | `sftp-concurrency` | Number of concurrent SFTP transfers (1-20). Only applies when `sync-method` is `sftp` | No | `4` |
 | `dry-run` | If `true`, shows proposed changes without applying them | No | `true` |
-| `install-poweron-list` | Comma-separated list of PowerOn files to install after sync (only for `powerOns`) | No | `''` |
-| `validate-ignore-list` | Comma-separated list of PowerOn files to skip validation for | No | `''` |
+| `install-poweron-list` | Comma-delimited list of PowerOn files to install after sync. Only applies to `powerOns`. | No | `''` |
+| `validate-ignore-list` | Comma-delimited list of PowerOn files to skip validation for | No | `''` |
+| `preserve-server-files` | Comma-delimited list of exact filenames or glob patterns where the server copy should be preserved during `push` or `mirror` | No | `''` |
+| `pull-preserved-only` | When `sync-mode` is `pull`, only pull files matched by `preserve-server-files`. If no preserve files are configured, the action exits without pulling files. | No | `false` |
+| `commit-pulled-changes` | When `sync-mode` is `pull`, commit and push pulled workspace changes after synchronization. No commit is created during `dry-run`. | No | `false` |
+| `commit-message` | Commit message used when `commit-pulled-changes` is enabled | No | `chore: sync server-managed Symitar files [skip ci]` |
+| `commit-branch` | Branch to push the commit to. Defaults to the checked-out branch. | No | `''` |
+| `git-user-name` | Git author name used when `commit-pulled-changes` is enabled | No | `libum-bot` |
+| `git-user-email` | Git author email used when `commit-pulled-changes` is enabled | No | `bot@libum.io` |
 | `debug` | Enable debug logging for Symitar clients | No | `false` |
 
 ### Outputs

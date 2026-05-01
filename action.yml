@@ -53,13 +53,41 @@ inputs:
     description: 'The PowerOn Pipelines API Key from the Libum Portal'
     required: true
   install-poweron-list:
-    description: 'Comma-separated list of PowerOn files to install after sync (only applies to powerOns directory type)'
+    description: 'Comma-delimited list of PowerOn files to install after sync (only applies to powerOns directory type)'
     required: false
     default: ''
   validate-ignore-list:
-    description: 'Comma-separated list of PowerOn files to skip validation for'
+    description: 'Comma-delimited list of PowerOn files to skip validation for'
     required: false
     default: ''
+  preserve-server-files:
+    description: 'Comma-delimited list of exact filenames or glob patterns where the server copy should be preserved during push/mirror. Use with pull-preserved-only to pull only these files.'
+    required: false
+    default: ''
+  pull-preserved-only:
+    description: 'When sync-mode is pull, only pull files matched by preserve-server-files. If no preserve-server-files are configured, this is a no-op.'
+    required: false
+    default: 'false'
+  commit-pulled-changes:
+    description: 'When sync-mode is pull, commit and push pulled workspace changes after synchronization. Never commits during dry-run.'
+    required: false
+    default: 'false'
+  commit-message:
+    description: 'Commit message used when commit-pulled-changes is enabled'
+    required: false
+    default: 'chore: sync server-managed Symitar files [skip ci]'
+  commit-branch:
+    description: 'Branch to push the commit to. Defaults to the checked-out branch.'
+    required: false
+    default: ''
+  git-user-name:
+    description: 'Git author name used when commit-pulled-changes is enabled'
+    required: false
+    default: 'libum-bot'
+  git-user-email:
+    description: 'Git author email used when commit-pulled-changes is enabled'
+    required: false
+    default: 'bot@libum.io'
   sync-method:
     description: 'The transport method for file synchronization: sftp (default) or rsync'
     required: false

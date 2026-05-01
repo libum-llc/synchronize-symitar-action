@@ -9,6 +9,14 @@ import {
   getLocalDirectoryPath,
   calculateTotalChanges,
 } from './directory-config';
+import { commitPulledChanges } from './git';
+
+function parseListInput(value: string): string[] {
+  return value
+    .split(',')
+    .map((f) => f.trim())
+    .filter((f) => f.length > 0);
+}
 
 export async function run(): Promise<void> {
   const logPrefix = '[SynchronizeSymitar]';
@@ -33,6 +41,17 @@ export async function run(): Promise<void> {
       core.getInput('install-poweron-list', { required: false }) || '';
     const validateIgnoreListInput =
       core.getInput('validate-ignore-list', { required: false }) || '';
+    const preserveServerFilesInput =
+      core.getInput('preserve-server-files', { required: false }) || '';
+    const pullPreservedOnly = core.getInput('pull-preserved-only', { required: false }) === 'true';
+    const commitPulledChangesEnabled =
+      core.getInput('commit-pulled-changes', { required: false }) === 'true';
+    const commitMessage =
+      core.getInput('commit-message', { required: false }) ||
+      'chore: sync server-managed Symitar files [skip ci]';
+    const commitBranch = core.getInput('commit-branch', { required: false }) || undefined;
+    const gitUserName = core.getInput('git-user-name', { required: false }) || 'libum-bot';
+    const gitUserEmail = core.getInput('git-user-email', { required: false }) || 'bot@libum.io';
     const syncMethodInput = core.getInput('sync-method', { required: false }) || 'sftp';
     const sftpConcurrencyInput = core.getInput('sftp-concurrency', { required: false }) || '4';
     const debug = core.getInput('debug', { required: false }) === 'true';
@@ -58,6 +77,10 @@ export async function run(): Promise<void> {
     // Validate sync mode
     if (syncMode !== 'push' && syncMode !== 'pull' && syncMode !== 'mirror') {
       throw new Error(`Invalid sync mode: ${syncMode}. Must be 'push', 'pull', or 'mirror'`);
+    }
+
+    if (commitPulledChangesEnabled && syncMode !== 'pull') {
+      throw new Error('commit-pulled-changes can only be used when sync-mode is pull');
     }
 
     // Validate sync method
@@ -113,16 +136,13 @@ export async function run(): Promise<void> {
     );
 
     // Parse install PowerOn list (only applies to PowerOns)
-    const installPowerOnList = installPowerOnListInput
-      .split(',')
-      .map((f) => f.trim())
-      .filter((f) => f.length > 0);
+    const installPowerOnList = parseListInput(installPowerOnListInput);
 
     // Parse validate ignore list
-    const validateIgnoreList = validateIgnoreListInput
-      .split(',')
-      .map((f) => f.trim())
-      .filter((f) => f.length > 0);
+    const validateIgnoreList = parseListInput(validateIgnoreListInput);
+
+    // Parse preserve server files
+    const preserveServerFiles = parseListInput(preserveServerFilesInput);
 
     core.info(`${logPrefix} Starting Symitar synchronization (v${version})`);
     core.info(`${logPrefix} Directory Type: ${directoryConfig.name}`);
@@ -152,6 +172,16 @@ export async function run(): Promise<void> {
       core.info(`${logPrefix} Validate Ignore List: ${validateIgnoreList.join(', ')}`);
     }
 
+    if (preserveServerFiles.length > 0) {
+      core.info(`${logPrefix} Preserve Server Files: ${preserveServerFiles.join(', ')}`);
+    }
+
+    if (pullPreservedOnly && preserveServerFiles.length === 0) {
+      core.info(
+        `${logPrefix} Pull preserved only is enabled, but no preserve-server-files patterns were configured. Nothing to pull.`,
+      );
+    }
+
     // Run synchronization
     const startTime = Date.now();
     const result = await synchronizeToSymitar({
@@ -173,7 +203,21 @@ export async function run(): Promise<void> {
       isDryRun,
       installPowerOnList,
       validateIgnoreList,
+      preserveServerFiles,
+      pullPreservedOnly,
       debug,
+      logPrefix,
+    });
+
+    await commitPulledChanges({
+      enabled: commitPulledChangesEnabled,
+      isDryRun,
+      syncMode,
+      localDirectoryPath,
+      commitMessage,
+      commitBranch,
+      gitUserName,
+      gitUserEmail,
       logPrefix,
     });
 

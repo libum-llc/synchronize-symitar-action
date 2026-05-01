@@ -35,6 +35,8 @@ export interface SynchronizeConfig {
   isDryRun: boolean;
   installPowerOnList: string[];
   validateIgnoreList: string[];
+  preserveServerFiles?: string[];
+  pullPreservedOnly?: boolean;
   debug: boolean;
   logPrefix: string;
 }
@@ -132,12 +134,22 @@ export async function synchronizeToSymitar(config: SynchronizeConfig): Promise<S
       installList,
       validateIgnoreList: config.validateIgnoreList,
     },
+    preserveServerFiles: config.preserveServerFiles || [],
+    pullPreservedOnly: config.pullPreservedOnly || false,
   };
 
   core.info(`${logPrefix} Using ${config.connectionType.toUpperCase()} connection`);
   core.info(`${logPrefix} Sync method: ${config.syncMethod.toUpperCase()}`);
   if (config.syncMethod === 'sftp') {
     core.info(`${logPrefix} SFTP concurrency: ${config.sftpConcurrency}`);
+  }
+  if ((config.preserveServerFiles || []).length > 0) {
+    core.info(
+      `${logPrefix} Preserve server files: ${(config.preserveServerFiles || []).join(', ')}`,
+    );
+  }
+  if (config.pullPreservedOnly) {
+    core.info(`${logPrefix} Pull preserved only: true`);
   }
   core.info(
     `${logPrefix} Beginning ${config.syncMode} synchronization of ${directoryConfig.name} for Sym ${config.symNumber}${config.isDryRun ? ' (Dry Run)' : ''}`,

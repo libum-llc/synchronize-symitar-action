@@ -78,6 +78,13 @@ function getDefaultInputs(): Record<string, string> {
     'api-key': 'test-api-key',
     'install-poweron-list': '',
     'validate-ignore-list': '',
+    'preserve-server-files': '',
+    'pull-preserved-only': 'false',
+    'commit-pulled-changes': 'false',
+    'commit-message': '',
+    'commit-branch': '',
+    'git-user-name': '',
+    'git-user-email': '',
     debug: 'false',
   };
 }
@@ -271,6 +278,20 @@ describe('main', () => {
     expect(mockedSynchronize).toHaveBeenCalledWith(
       expect.objectContaining({
         validateIgnoreList: ['TEST.PO', 'SKIP.PO'],
+      }),
+    );
+  });
+
+  it('should parse preserve-server-files correctly', async () => {
+    const inputs = getDefaultInputs();
+    inputs['preserve-server-files'] = 'RD.*, PFR.*';
+    mockedCore.getInput.mockImplementation((name: string) => inputs[name] || '');
+
+    await run();
+
+    expect(mockedSynchronize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        preserveServerFiles: ['RD.*', 'PFR.*'],
       }),
     );
   });

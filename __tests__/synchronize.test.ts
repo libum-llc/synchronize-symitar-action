@@ -145,6 +145,8 @@ describe('synchronize', () => {
             installList: ['FILE1.PO'],
             validateIgnoreList: [],
           },
+          preserveServerFiles: [],
+          pullPreservedOnly: false,
         },
         false,
       );
@@ -274,6 +276,8 @@ describe('synchronize', () => {
             installList: ['FILE1.PO'],
             validateIgnoreList: [],
           },
+          preserveServerFiles: [],
+          pullPreservedOnly: false,
         },
         false,
       );
