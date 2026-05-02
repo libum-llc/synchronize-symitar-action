@@ -13,8 +13,8 @@ import { commitPulledChanges } from './git';
 
 function parseListInput(value: string): string[] {
   return value
-    .split(',')
-    .map((f) => f.trim())
+    .split(/[,\n]/)
+    .map((f) => f.trim().replace(/^-\s*/, ''))
     .filter((f) => f.length > 0);
 }
 

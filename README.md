@@ -17,6 +17,8 @@ ___
   - [Using Mirror Mode](#using-mirror-mode)
   - [Preserving Server-Managed Files](#preserving-server-managed-files)
   - [Pulling Preserved Files Back to Git](#pulling-preserved-files-back-to-git)
+  - [Release Pipeline with Environment Approvals](#release-pipeline-with-environment-approvals)
+- [List Inputs](#list-inputs)
 - [Customizing](#customizing)
   - [Inputs](#inputs)
   - [Outputs](#outputs)
@@ -151,7 +153,9 @@ jobs:
           api-key: ${{ secrets.API_KEY }}
           sync-mode: mirror
           dry-run: false
-          preserve-server-files: RD.*,PFR.*
+          preserve-server-files: |
+            - RD.*
+            - PFR.*
 ```
 
 ### Pulling Preserved Files Back to Git
@@ -183,10 +187,224 @@ jobs:
           api-key: ${{ secrets.API_KEY }}
           sync-mode: pull
           dry-run: false
-          preserve-server-files: RD.*,PFR.*
+          preserve-server-files: |
+            - RD.*
+            - PFR.*
           pull-preserved-only: true
           commit-pulled-changes: true
           commit-branch: main
+```
+
+### Release Pipeline with Environment Approvals
+
+For credit unions running both a Stage and a Prod Symitar environment, this pattern uses GitHub Releases as the trigger and gates each deploy behind a required-reviewer approval. Each environment runs a dry-run first (no approval), then a real deploy that requires reviewer sign-off.
+
+**Job graph**
+
+```
+release: published
+   │
+   ▼
+[stage-dry-run]   environment: Stage-Preview   (no approval, dry-run: true)
+   │
+   ▼
+[stage-deploy]    environment: Stage           (approval required, dry-run: false)
+   │
+   ▼
+[prod-dry-run]    environment: Prod-Preview    (no approval, dry-run: true)
+   │
+   ▼
+[prod-deploy]     environment: Prod            (approval required, dry-run: false)
+```
+
+**Setup requirements**
+
+In repo Settings → Environments, create four environments:
+
+| Environment | Required reviewers | Purpose |
+|-------------|--------------------|---------|
+| `Stage-Preview` | none | Dry-run preview against Stage Symitar |
+| `Stage` | 1+ reviewers | Real deploy to Stage |
+| `Prod-Preview` | none | Dry-run preview against Prod Symitar |
+| `Prod` | 1+ reviewers | Real deploy to Prod |
+
+Each environment holds its own Symitar credentials as scoped secrets and variables:
+
+| Type | Name | Notes |
+|------|------|-------|
+| Variable | `SYMITAR_HOSTNAME` | Hostname / IP for that environment's Sym |
+| Variable | `SYM_NUMBER` | Sym number |
+| Variable | `SYMITAR_USER_NUMBER` | Quest user number |
+| Variable | `SYMITAR_APP_PORT` | SymAppServer port (typically `42` + sym number) |
+| Variable | `SSH_USERNAME` | AIX SSH username |
+| Secret | `SYMITAR_USER_PASSWORD` | Quest user password |
+| Secret | `SYMITAR_PASSWORD` | AIX SSH password |
+| Secret | `API_KEY` | PowerOn Pipelines API key |
+
+The same secret/variable values go on `Stage-Preview` and `Stage` (one set of Stage credentials, used by both dry-run and deploy). Same for `Prod-Preview` and `Prod`.
+
+**Workflow**
+
+```yaml
+name: symitar-release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Tag/branch/SHA to deploy'
+        required: true
+        default: 'main'
+      target:
+        description: 'Which segment to run'
+        type: choice
+        required: true
+        default: all
+        options: [all, stage, prod]
+
+jobs:
+  stage-dry-run:
+    name: Stage (Dry Run)
+    if: github.event_name == 'release' || inputs.target == 'all' || inputs.target == 'stage'
+    runs-on: self-hosted
+    environment: Stage-Preview
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.ref }}
+      - uses: libum-llc/synchronize-symitar-action@v1
+        with:
+          directory-type: powerOns
+          symitar-hostname: ${{ vars.SYMITAR_HOSTNAME }}
+          sym-number: ${{ vars.SYM_NUMBER }}
+          symitar-user-number: ${{ vars.SYMITAR_USER_NUMBER }}
+          symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
+          symitar-app-port: ${{ vars.SYMITAR_APP_PORT }}
+          ssh-username: ${{ vars.SSH_USERNAME }}
+          ssh-password: ${{ secrets.SYMITAR_PASSWORD }}
+          api-key: ${{ secrets.API_KEY }}
+          connection-type: https
+          sync-mode: mirror
+          dry-run: true
+          preserve-server-files: |
+            - RD.*
+            - PFR.*
+
+  stage-deploy:
+    name: Stage (Deploy)
+    needs: stage-dry-run
+    if: |
+      always()
+      && (needs.stage-dry-run.result == 'success' || needs.stage-dry-run.result == 'skipped')
+      && (github.event_name == 'release' || inputs.target == 'all' || inputs.target == 'stage')
+    runs-on: self-hosted
+    environment: Stage
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.ref }}
+      - uses: libum-llc/synchronize-symitar-action@v1
+        with:
+          directory-type: powerOns
+          symitar-hostname: ${{ vars.SYMITAR_HOSTNAME }}
+          sym-number: ${{ vars.SYM_NUMBER }}
+          symitar-user-number: ${{ vars.SYMITAR_USER_NUMBER }}
+          symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
+          symitar-app-port: ${{ vars.SYMITAR_APP_PORT }}
+          ssh-username: ${{ vars.SSH_USERNAME }}
+          ssh-password: ${{ secrets.SYMITAR_PASSWORD }}
+          api-key: ${{ secrets.API_KEY }}
+          connection-type: https
+          sync-mode: mirror
+          dry-run: false
+          preserve-server-files: |
+            - RD.*
+            - PFR.*
+
+  prod-dry-run:
+    name: Prod (Dry Run)
+    needs: stage-deploy
+    if: |
+      always()
+      && (needs.stage-deploy.result == 'success' || needs.stage-deploy.result == 'skipped')
+      && (github.event_name == 'release' || inputs.target == 'all' || inputs.target == 'prod')
+    runs-on: self-hosted
+    environment: Prod-Preview
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.ref }}
+      - uses: libum-llc/synchronize-symitar-action@v1
+        with:
+          directory-type: powerOns
+          symitar-hostname: ${{ vars.SYMITAR_HOSTNAME }}
+          sym-number: ${{ vars.SYM_NUMBER }}
+          symitar-user-number: ${{ vars.SYMITAR_USER_NUMBER }}
+          symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
+          symitar-app-port: ${{ vars.SYMITAR_APP_PORT }}
+          ssh-username: ${{ vars.SSH_USERNAME }}
+          ssh-password: ${{ secrets.SYMITAR_PASSWORD }}
+          api-key: ${{ secrets.API_KEY }}
+          connection-type: https
+          sync-mode: mirror
+          dry-run: true
+          preserve-server-files: |
+            - RD.*
+            - PFR.*
+
+  prod-deploy:
+    name: Prod (Deploy)
+    needs: prod-dry-run
+    if: |
+      always()
+      && (needs.prod-dry-run.result == 'success' || needs.prod-dry-run.result == 'skipped')
+      && (github.event_name == 'release' || inputs.target == 'all' || inputs.target == 'prod')
+    runs-on: self-hosted
+    environment: Prod
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.ref }}
+      - uses: libum-llc/synchronize-symitar-action@v1
+        with:
+          directory-type: powerOns
+          symitar-hostname: ${{ vars.SYMITAR_HOSTNAME }}
+          sym-number: ${{ vars.SYM_NUMBER }}
+          symitar-user-number: ${{ vars.SYMITAR_USER_NUMBER }}
+          symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
+          symitar-app-port: ${{ vars.SYMITAR_APP_PORT }}
+          ssh-username: ${{ vars.SSH_USERNAME }}
+          ssh-password: ${{ secrets.SYMITAR_PASSWORD }}
+          api-key: ${{ secrets.API_KEY }}
+          connection-type: https
+          sync-mode: mirror
+          dry-run: false
+          preserve-server-files: |
+            - RD.*
+            - PFR.*
+```
+
+Cutting a GitHub Release runs the full pipeline. `workflow_dispatch` lets you re-run a single segment (`stage` or `prod`) against any tag, branch, or SHA without cutting a new release. If `stage-deploy` fails, the Prod jobs are skipped automatically.
+
+## List Inputs
+
+`install-poweron-list`, `validate-ignore-list`, and `preserve-server-files` accept either a comma-delimited string or a YAML list (one item per line, optionally `- ` prefixed). YAML list form is recommended when you have more than a handful of entries — it stays readable as the list grows.
+
+```yaml
+# Comma-delimited (good for short lists)
+preserve-server-files: RD.*, PFR.*
+
+# Multi-line (one item per line)
+preserve-server-files: |
+  RD.*
+  PFR.*
+
+# YAML block-sequence (mirrors poweron.yml conventions)
+preserve-server-files: |
+  - RD.*
+  - PFR.*
 ```
 
 ## Customizing
@@ -211,9 +429,9 @@ jobs:
 | `sync-method` | Transport method for file synchronization: `sftp` or `rsync` | No | `sftp` |
 | `sftp-concurrency` | Number of concurrent SFTP transfers (1-20). Only applies when `sync-method` is `sftp` | No | `4` |
 | `dry-run` | If `true`, shows proposed changes without applying them | No | `true` |
-| `install-poweron-list` | Comma-delimited list of PowerOn files to install after sync. Only applies to `powerOns`. | No | `''` |
-| `validate-ignore-list` | Comma-delimited list of PowerOn files to skip validation for | No | `''` |
-| `preserve-server-files` | Comma-delimited list of exact filenames or glob patterns where the server copy should be preserved during `push` or `mirror` | No | `''` |
+| `install-poweron-list` | List of PowerOn files to install after sync. Accepts comma-delimited or YAML list — see [List Inputs](#list-inputs). Only applies to `powerOns`. | No | `''` |
+| `validate-ignore-list` | List of PowerOn files to skip validation for. Accepts comma-delimited or YAML list — see [List Inputs](#list-inputs). | No | `''` |
+| `preserve-server-files` | List of exact filenames or glob patterns where the server copy should be preserved during `push` or `mirror`. Accepts comma-delimited or YAML list — see [List Inputs](#list-inputs). | No | `''` |
 | `pull-preserved-only` | When `sync-mode` is `pull`, only pull files matched by `preserve-server-files`. If no preserve files are configured, the action exits without pulling files. | No | `false` |
 | `commit-pulled-changes` | When `sync-mode` is `pull`, commit and push pulled workspace changes after synchronization. No commit is created during `dry-run`. | No | `false` |
 | `commit-message` | Commit message used when `commit-pulled-changes` is enabled | No | `chore: sync server-managed Symitar files [skip ci]` |

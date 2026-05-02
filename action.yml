@@ -53,15 +53,15 @@ inputs:
     description: 'The PowerOn Pipelines API Key from the Libum Portal'
     required: true
   install-poweron-list:
-    description: 'Comma-delimited list of PowerOn files to install after sync (only applies to powerOns directory type)'
+    description: 'List of PowerOn files to install after sync. Accepts a comma-delimited string or a YAML list (one item per line, optionally `- ` prefixed). Only applies to powerOns directory type.'
     required: false
     default: ''
   validate-ignore-list:
-    description: 'Comma-delimited list of PowerOn files to skip validation for'
+    description: 'List of PowerOn files to skip validation for. Accepts a comma-delimited string or a YAML list (one item per line, optionally `- ` prefixed).'
     required: false
     default: ''
   preserve-server-files:
-    description: 'Comma-delimited list of exact filenames or glob patterns where the server copy should be preserved during push/mirror. Use with pull-preserved-only to pull only these files.'
+    description: 'List of exact filenames or glob patterns where the server copy should be preserved during push/mirror. Accepts a comma-delimited string or a YAML list (one item per line, optionally `- ` prefixed). Use with pull-preserved-only to pull only these files.'
     required: false
     default: ''
   pull-preserved-only:

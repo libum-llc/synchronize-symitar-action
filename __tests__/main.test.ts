@@ -296,6 +296,40 @@ describe('main', () => {
     );
   });
 
+  it('should parse multi-line list inputs (newline-delimited)', async () => {
+    const inputs = getDefaultInputs();
+    inputs['preserve-server-files'] = 'RD.*\nPFR.*\n';
+    inputs['validate-ignore-list'] = 'TEST.PO\nSKIP.PO';
+    inputs['install-poweron-list'] = 'A.PO,B.PO\nC.PO';
+    mockedCore.getInput.mockImplementation((name: string) => inputs[name] || '');
+
+    await run();
+
+    expect(mockedSynchronize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        preserveServerFiles: ['RD.*', 'PFR.*'],
+        validateIgnoreList: ['TEST.PO', 'SKIP.PO'],
+        installPowerOnList: ['A.PO', 'B.PO', 'C.PO'],
+      }),
+    );
+  });
+
+  it('should parse YAML block-sequence list inputs (- prefixed)', async () => {
+    const inputs = getDefaultInputs();
+    inputs['preserve-server-files'] = '- RD.*\n- PFR.*\n';
+    inputs['validate-ignore-list'] = '  - ASCIICHAR.DATA\n  - RB.SYNERGY.AP.INDEX.ASCIIDATA';
+    mockedCore.getInput.mockImplementation((name: string) => inputs[name] || '');
+
+    await run();
+
+    expect(mockedSynchronize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        preserveServerFiles: ['RD.*', 'PFR.*'],
+        validateIgnoreList: ['ASCIICHAR.DATA', 'RB.SYNERGY.AP.INDEX.ASCIIDATA'],
+      }),
+    );
+  });
+
   it('should pass sym number as integer', async () => {
     const inputs = getDefaultInputs();
     inputs['sym-number'] = '7';
