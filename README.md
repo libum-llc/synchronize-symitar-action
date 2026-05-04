@@ -228,7 +228,18 @@ In repo Settings → Environments, create four environments:
 | `Prod-Preview` | none | Dry-run preview against Prod Symitar |
 | `Prod` | 1+ reviewers | Real deploy to Prod |
 
-Each environment holds its own Symitar credentials as scoped secrets and variables:
+> **Required reviewers are a paid feature on private repos.** They're free on public repos and on private repos under GitHub Pro / Team / Enterprise plans, but **not available on GitHub Free for private repos**. If you don't see a "Deployment protection rules" section under your environment, your plan/visibility combo doesn't include it. As a fallback, insert a manual-approval step (e.g. [`trstringer/manual-approval`](https://github.com/trstringer/manual-approval)) as the first step of each deploy job — it opens a GitHub Issue and blocks until an approver comments.
+
+**Deployment branches and tags** (per environment, under "Selected branches and tags"):
+
+| Environment | Allowed refs | Why |
+|-------------|--------------|-----|
+| `Stage-Preview`, `Stage` | branch `main` + tag pattern `v*` | Allows manual dispatch from `main` and release-triggered runs from tagged releases |
+| `Prod-Preview`, `Prod` | tag pattern `v*` only | Forces every Prod deploy to be a tagged release |
+
+If you don't enforce a tag convention, switch to "All branches and tags" — but tagged releases won't trigger if the tag pattern is wrong, so set this before cutting your first release. A common symptom of a misconfigured rule is `Tag v1.0.0 is not allowed to deploy to <env> due to environment protection rules` in the run logs.
+
+**Variables and secrets** — credentials for each environment's Symitar:
 
 | Type | Name | Notes |
 |------|------|-------|
@@ -241,11 +252,21 @@ Each environment holds its own Symitar credentials as scoped secrets and variabl
 | Secret | `SYMITAR_PASSWORD` | AIX SSH password |
 | Secret | `API_KEY` | PowerOn Pipelines API key |
 
-The same secret/variable values go on `Stage-Preview` and `Stage` (one set of Stage credentials, used by both dry-run and deploy). Same for `Prod-Preview` and `Prod`.
+You have two options for where these live:
+
+1. **Environment-scoped** (recommended when Stage and Prod use *different* Symitar credentials): put them on each environment. Same values on `Stage-Preview` + `Stage`; same on `Prod-Preview` + `Prod`.
+2. **Repo-level** (when both environments share one Symitar, e.g. a single Sym used for both staged validation and production): keep environments empty and add the values once at the repo level. The workflow resolves `secrets.*` / `vars.*` to repo-level values when no env-scoped equivalent exists.
 
 **Workflow**
 
 ```yaml
+# Before this workflow can run, configure four environments under Settings → Environments:
+#   - Stage-Preview, Stage, Prod-Preview, Prod
+# On `Stage` and `Prod`, enable Required reviewers (paid feature on private repos —
+# requires GitHub Pro / Team / Enterprise; not available on Free for private repos).
+# Set "Deployment branches and tags" on each environment to allow `main` + `v*` tags
+# (Stage / Stage-Preview), or `v*` tags only (Prod / Prod-Preview).
+# See the "Setup requirements" section above for the full credential matrix.
 name: symitar-release
 
 on:
@@ -267,9 +288,10 @@ on:
 jobs:
   stage-dry-run:
     name: Stage (Dry Run)
+    # Runs immediately on release-published, or on dispatch when target is `all` or `stage`.
     if: github.event_name == 'release' || inputs.target == 'all' || inputs.target == 'stage'
     runs-on: self-hosted
-    environment: Stage-Preview
+    environment: Stage-Preview  # No required reviewers — this is the unblocked preview.
     steps:
       - uses: actions/checkout@v4
         with:
@@ -294,13 +316,12 @@ jobs:
 
   stage-deploy:
     name: Stage (Deploy)
+    # Default `needs:` semantics: runs only if stage-dry-run succeeded.
+    # If stage-dry-run is skipped (e.g. target=prod) or fails, this job is auto-skipped.
     needs: stage-dry-run
-    if: |
-      always()
-      && (needs.stage-dry-run.result == 'success' || needs.stage-dry-run.result == 'skipped')
-      && (github.event_name == 'release' || inputs.target == 'all' || inputs.target == 'stage')
+    if: github.event_name == 'release' || inputs.target == 'all' || inputs.target == 'stage'
     runs-on: self-hosted
-    environment: Stage
+    environment: Stage  # Required reviewers configured here gate the real deploy.
     steps:
       - uses: actions/checkout@v4
         with:
@@ -325,11 +346,17 @@ jobs:
 
   prod-dry-run:
     name: Prod (Dry Run)
+    # Two distinct run modes:
+    #   1. target=prod — start immediately, regardless of stage-deploy status (stage was skipped on purpose).
+    #   2. release/target=all — only proceed if stage-deploy succeeded. A failed Stage stops Prod.
+    # `always()` is required so the if is evaluated when the upstream `stage-deploy` was skipped.
     needs: stage-deploy
     if: |
       always()
-      && (needs.stage-deploy.result == 'success' || needs.stage-deploy.result == 'skipped')
-      && (github.event_name == 'release' || inputs.target == 'all' || inputs.target == 'prod')
+      && (
+        inputs.target == 'prod'
+        || ((github.event_name == 'release' || inputs.target == 'all') && needs.stage-deploy.result == 'success')
+      )
     runs-on: self-hosted
     environment: Prod-Preview
     steps:
@@ -356,13 +383,11 @@ jobs:
 
   prod-deploy:
     name: Prod (Deploy)
+    # Default `needs:` semantics: runs only if prod-dry-run succeeded.
     needs: prod-dry-run
-    if: |
-      always()
-      && (needs.prod-dry-run.result == 'success' || needs.prod-dry-run.result == 'skipped')
-      && (github.event_name == 'release' || inputs.target == 'all' || inputs.target == 'prod')
+    if: github.event_name == 'release' || inputs.target == 'all' || inputs.target == 'prod'
     runs-on: self-hosted
-    environment: Prod
+    environment: Prod  # Required reviewers configured here — typically a tighter list than Stage.
     steps:
       - uses: actions/checkout@v4
         with:
@@ -386,7 +411,12 @@ jobs:
             - PFR.*
 ```
 
-Cutting a GitHub Release runs the full pipeline. `workflow_dispatch` lets you re-run a single segment (`stage` or `prod`) against any tag, branch, or SHA without cutting a new release. If `stage-deploy` fails, the Prod jobs are skipped automatically.
+**Behavior summary**
+
+- Cutting a GitHub Release runs the full chain: Stage dry-run → Stage approval → Stage deploy → Prod dry-run → Prod approval → Prod deploy.
+- `workflow_dispatch` with `target: stage` or `target: prod` runs only that segment against any tag, branch, or SHA without cutting a release. `target: prod` skips Stage entirely.
+- A **failed** dry-run or deploy stops the chain — downstream jobs are skipped (not run).
+- An **intentionally skipped** Stage (when `target: prod`) does not block Prod from running.
 
 ## List Inputs
 
