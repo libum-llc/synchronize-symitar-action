@@ -245,6 +245,66 @@ Configure actions/checkout with ref: main.
 
 The same error is raised when the workspace is in a detached HEAD state (e.g. checking out a tag without specifying a branch).
 
+#### Pulling via Pull Request (when the target branch is protected)
+
+If the branch you'd commit to is protected against direct pushes — typical for `main` in most repos — `commit-pulled-changes: true` will fail at the push step with `protected branch hook declined`. To work around this without weakening the protection rule, set `commit-pulled-changes: false` and have a downstream step open a PR with the pulled changes. [`peter-evans/create-pull-request`](https://github.com/peter-evans/create-pull-request) is the standard choice.
+
+```yaml
+on:
+  workflow_dispatch:
+    inputs:
+      commit_branch:
+        description: 'Branch the PR will target'
+        type: string
+        default: main
+      dry_run:
+        type: boolean
+        default: true
+
+jobs:
+  pull-server-managed:
+    runs-on: self-hosted
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_branch || 'main' }}
+
+      - id: sync
+        uses: libum-llc/synchronize-symitar-action@v1
+        with:
+          # ...creds...
+          sync-mode: pull
+          dry-run: ${{ inputs.dry_run }}
+          pull-preserved-only: true
+          preserve-server-files: |
+            - RD.*
+            - PFR.*
+          commit-pulled-changes: false  # PR-creation step handles the commit + push
+
+      - name: Open PR for pulled changes
+        if: inputs.dry_run != true
+        uses: peter-evans/create-pull-request@v7
+        with:
+          base: ${{ inputs.commit_branch || 'main' }}
+          branch: chore/symitar-pull   # fixed name → subsequent runs update the same PR
+          delete-branch: true
+          commit-message: 'chore: sync server-managed Symitar files'
+          title: 'chore: sync server-managed Symitar files'
+          body: |
+            Auto-generated pull of server-managed PowerOns.
+
+            - Files Pulled: ${{ steps.sync.outputs.files-deployed }}
+            - Outliers (drift): ${{ steps.sync.outputs.outliers-count }}
+```
+
+Notes:
+- The action's own commit-branch guard is inert here since `commit-pulled-changes: false`; checkout + PR base alignment is handled by the workflow inputs.
+- Reusing the same `branch:` value (`chore/symitar-pull`) means a second run before the PR is merged just *updates* the open PR rather than piling up new ones.
+- Outputs from the sync step (`files-deployed`, `outliers-count`, `outlier-files`) feed straight into the PR body so reviewers see the change shape and any drift before approving.
+
 #### Drift Detection (Outliers)
 
 When `sync-mode: pull` and `pull-preserved-only: true`, the action also reports **outliers**: server files that differ from your repo *and aren't matched by `preserve-server-files`*. These represent server-side drift outside the "server is source of truth" allowlist — typically unauthorized direct edits on Symitar that should have come through git.
