@@ -43,6 +43,31 @@ export async function commitPulledChanges(config: CommitPulledChangesConfig): Pr
 
   const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
 
+  // Guard: when commit-branch is set, the checked-out HEAD must match it.
+  // Otherwise the diff is computed against a different branch's tree and the
+  // resulting commit silently overwrites commit-branch with that branch's content.
+  if (config.commitBranch) {
+    const headBranch = await getExecOutput(
+      'git',
+      ['rev-parse', '--abbrev-ref', 'HEAD'],
+      workspace,
+    );
+    if (headBranch === 'HEAD') {
+      throw new Error(
+        `commit-branch is "${config.commitBranch}" but the workspace is in a detached HEAD state. ` +
+          `Configure actions/checkout with ref: ${config.commitBranch} so drift detection and the commit target match.`,
+      );
+    }
+    if (headBranch !== config.commitBranch) {
+      throw new Error(
+        `commit-branch is "${config.commitBranch}" but the checked-out branch is "${headBranch}". ` +
+          `These must match — drift is computed against the working tree, and pushing to a different branch ` +
+          `would silently move that branch's content. ` +
+          `Configure actions/checkout with ref: ${config.commitBranch}.`,
+      );
+    }
+  }
+
   await exec.exec('git', ['config', 'user.name', config.gitUserName], { cwd: workspace });
   await exec.exec('git', ['config', 'user.email', config.gitUserEmail], { cwd: workspace });
   await exec.exec('git', ['add', '--', config.localDirectoryPath], { cwd: workspace });

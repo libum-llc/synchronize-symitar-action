@@ -164,6 +164,8 @@ Use `pull-preserved-only` when you want a workflow that only downloads preserved
 
 When `commit-pulled-changes` is enabled, the action commits and pushes pulled changes after synchronization. No commit or push is performed during `dry-run`.
 
+> **Important:** when `commit-branch` is set, the workflow must check out that same branch before running this action. Drift is computed against the working tree, and the action pushes the resulting commit to `commit-branch` — if the checked-out ref and `commit-branch` don't match, the diff would be measured against the wrong branch and the push would silently move that branch's content. The action enforces this by erroring out when HEAD doesn't match `commit-branch`. Set `actions/checkout@v4` with `ref: <same-as-commit-branch>` (or use a workflow input that drives both, as in the example below).
+
 ```yaml
 jobs:
   pull-server-managed:
@@ -173,6 +175,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: main   # must match commit-branch below
 
       - name: Pull server-managed PowerOns
         uses: libum-llc/synchronize-symitar-action@v1
@@ -194,6 +198,52 @@ jobs:
           commit-pulled-changes: true
           commit-branch: main
 ```
+
+For workflows that need to run against more than one branch (e.g. a manually-dispatched pull that can target `main` or a release branch), drive both `checkout.ref` and `commit-branch` from a single input so they can never drift:
+
+```yaml
+on:
+  workflow_dispatch:
+    inputs:
+      commit_branch:
+        description: 'Branch to compare against and commit pulled changes to'
+        type: string
+        default: main
+
+jobs:
+  pull-server-managed:
+    runs-on: self-hosted
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_branch || 'main' }}
+
+      - uses: libum-llc/synchronize-symitar-action@v1
+        with:
+          # ...creds...
+          sync-mode: pull
+          pull-preserved-only: true
+          preserve-server-files: |
+            - RD.*
+            - PFR.*
+          commit-pulled-changes: true
+          commit-branch: ${{ inputs.commit_branch || 'main' }}
+```
+
+The `|| 'main'` fallback covers events that don't carry inputs (e.g. `schedule:`).
+
+If the checked-out branch ever doesn't match `commit-branch`, the action will fail fast with a message like:
+
+```
+commit-branch is "main" but the checked-out branch is "feature-x".
+These must match — drift is computed against the working tree, and pushing
+to a different branch would silently move that branch's content.
+Configure actions/checkout with ref: main.
+```
+
+The same error is raised when the workspace is in a detached HEAD state (e.g. checking out a tag without specifying a branch).
 
 #### Drift Detection (Outliers)
 
