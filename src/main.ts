@@ -228,6 +228,14 @@ export async function run(): Promise<void> {
     core.setOutput('files-deleted', result.filesDeleted);
     core.setOutput('files-installed', result.filesInstalled);
     core.setOutput('files-uninstalled', result.filesUninstalled);
+    core.setOutput('outliers-count', result.outliersCount);
+    core.setOutput('outlier-files', JSON.stringify(result.outlierFiles));
+
+    if (result.outliersCount > 0) {
+      core.warning(
+        `Drift detected: ${result.outliersCount} server file(s) differ from local and are not preserve-matched: ${result.outlierFiles.join(', ')}`,
+      );
+    }
 
     // Calculate total changes
     const totalChanges = calculateTotalChanges(directoryType, {
@@ -273,6 +281,13 @@ export async function run(): Promise<void> {
             core.info(`${logPrefix}   ✗ ${file}`);
           }
         }
+      }
+    }
+
+    if (result.outliersCount > 0) {
+      core.info(`${logPrefix} Outliers (server-side drift): ${result.outliersCount}`);
+      for (const file of result.outlierFiles) {
+        core.info(`${logPrefix}   ⚠ ${file}`);
       }
     }
 

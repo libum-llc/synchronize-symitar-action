@@ -46,10 +46,12 @@ export interface SynchronizeResult {
   filesDeleted: number;
   filesInstalled: number;
   filesUninstalled: number;
+  outliersCount: number;
   deployedFiles: string[];
   deletedFiles: string[];
   installedFiles: string[];
   uninstalledFiles: string[];
+  outlierFiles: string[];
 }
 
 function createProgressCallback(logPrefix: string): (progress: SyncFilesProgress) => void {
@@ -178,10 +180,12 @@ export async function synchronizeToSymitar(config: SynchronizeConfig): Promise<S
     filesDeleted: result.deleted.length,
     filesInstalled: result.installed?.length ?? 0,
     filesUninstalled: result.uninstalled?.length ?? 0,
+    outliersCount: result.outliers?.length ?? 0,
     deployedFiles: result.synced,
     deletedFiles: result.deleted,
     installedFiles: result.installed ?? [],
     uninstalledFiles: result.uninstalled ?? [],
+    outlierFiles: result.outliers ?? [],
   };
 }
 

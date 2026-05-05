@@ -306,10 +306,12 @@ describe('synchronize', () => {
         filesDeleted: 1,
         filesInstalled: 1,
         filesUninstalled: 0,
+        outliersCount: 0,
         deployedFiles: ['FILE1.PO', 'FILE2.PO'],
         deletedFiles: ['OLD.PO'],
         installedFiles: ['FILE1.PO'],
         uninstalledFiles: [],
+        outlierFiles: [],
       });
     });
 
@@ -318,6 +320,7 @@ describe('synchronize', () => {
         synced: [],
         deleted: [],
         skipped: [],
+        outliers: [],
         errors: [],
         installed: [],
         uninstalled: [],
@@ -330,11 +333,30 @@ describe('synchronize', () => {
         filesDeleted: 0,
         filesInstalled: 0,
         filesUninstalled: 0,
+        outliersCount: 0,
         deployedFiles: [],
         deletedFiles: [],
         installedFiles: [],
         uninstalledFiles: [],
+        outlierFiles: [],
       });
+    });
+
+    it('should map outliers from lib result through to action result', async () => {
+      mockSSHSyncFiles.mockResolvedValue({
+        synced: ['RD.A'],
+        deleted: [],
+        skipped: [],
+        outliers: ['MYREPORT.PO', 'OTHER.PO'],
+        errors: [],
+        installed: [],
+        uninstalled: [],
+      });
+
+      const result = await synchronizeToSymitar(defaultConfig);
+
+      expect(result.outliersCount).toBe(2);
+      expect(result.outlierFiles).toEqual(['MYREPORT.PO', 'OTHER.PO']);
     });
   });
 

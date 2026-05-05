@@ -110,6 +110,10 @@ outputs:
     description: 'Number of PowerOn files installed (only for powerOns directory type)'
   files-uninstalled:
     description: 'Number of PowerOn files uninstalled (only for powerOns directory type)'
+  outliers-count:
+    description: 'Number of server files that differ from local but are NOT preserve-matched (server-side drift detection). Only populated when sync-mode is pull and pull-preserved-only is true.'
+  outlier-files:
+    description: 'JSON array of outlier file names'
 
 runs:
   using: 'node20'

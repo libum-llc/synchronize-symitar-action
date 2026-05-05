@@ -195,6 +195,33 @@ jobs:
           commit-branch: main
 ```
 
+#### Drift Detection (Outliers)
+
+When `sync-mode: pull` and `pull-preserved-only: true`, the action also reports **outliers**: server files that differ from your repo *and aren't matched by `preserve-server-files`*. These represent server-side drift outside the "server is source of truth" allowlist — typically unauthorized direct edits on Symitar that should have come through git.
+
+Outliers are **not pulled** in `pull-preserved-only` mode (the whole point is to leave non-preserved files alone). They're surfaced as outputs so workflows can fail, notify, or open an issue.
+
+```yaml
+- id: pull
+  uses: libum-llc/synchronize-symitar-action@v1
+  with:
+    # ...creds...
+    sync-mode: pull
+    pull-preserved-only: true
+    preserve-server-files: |
+      - RD.*
+      - PFR.*
+
+- name: Fail on server-side drift
+  if: steps.pull.outputs.outliers-count != '0'
+  run: |
+    echo "::error::Server-side drift detected outside preserved patterns"
+    echo "Files: ${{ steps.pull.outputs.outlier-files }}"
+    exit 1
+```
+
+The action also emits a `core.warning` annotation when outliers are detected, so they show up in the run UI without any extra wiring.
+
 ### Release Pipeline with Environment Approvals
 
 For credit unions running both a Stage and a Prod Symitar environment, this pattern uses GitHub Releases as the trigger and gates each deploy behind a required-reviewer approval. Each environment runs a dry-run first (no approval), then a real deploy that requires reviewer sign-off.
@@ -478,6 +505,8 @@ preserve-server-files: |
 | `files-deleted` | Number of files deleted |
 | `files-installed` | Number of PowerOn files installed (only for `powerOns`) |
 | `files-uninstalled` | Number of PowerOn files uninstalled (only for `powerOns`) |
+| `outliers-count` | Number of server files that differ from local but are NOT preserve-matched (drift detection). Only populated when `sync-mode` is `pull` and `pull-preserved-only` is `true`. |
+| `outlier-files` | JSON array of outlier file names |
 
 ### Secrets
 

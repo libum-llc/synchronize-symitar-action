@@ -104,10 +104,12 @@ describe('main', () => {
       filesDeleted: 1,
       filesInstalled: 1,
       filesUninstalled: 0,
+      outliersCount: 0,
       deployedFiles: ['FILE1.PO', 'FILE2.PO'],
       deletedFiles: ['OLD.PO'],
       installedFiles: ['FILE1.PO'],
       uninstalledFiles: [],
+      outlierFiles: [],
     });
   });
 
@@ -118,6 +120,34 @@ describe('main', () => {
     expect(mockedCore.setOutput).toHaveBeenCalledWith('files-deleted', 1);
     expect(mockedCore.setOutput).toHaveBeenCalledWith('files-installed', 1);
     expect(mockedCore.setOutput).toHaveBeenCalledWith('files-uninstalled', 0);
+    expect(mockedCore.setOutput).toHaveBeenCalledWith('outliers-count', 0);
+    expect(mockedCore.setOutput).toHaveBeenCalledWith('outlier-files', '[]');
+  });
+
+  it('should expose outlier outputs and warn when drift is detected', async () => {
+    mockedSynchronize.mockResolvedValueOnce({
+      filesDeployed: 1,
+      filesDeleted: 0,
+      filesInstalled: 0,
+      filesUninstalled: 0,
+      outliersCount: 2,
+      deployedFiles: ['RD.A'],
+      deletedFiles: [],
+      installedFiles: [],
+      uninstalledFiles: [],
+      outlierFiles: ['MYREPORT.PO', 'OTHER.PO'],
+    });
+
+    await run();
+
+    expect(mockedCore.setOutput).toHaveBeenCalledWith('outliers-count', 2);
+    expect(mockedCore.setOutput).toHaveBeenCalledWith(
+      'outlier-files',
+      JSON.stringify(['MYREPORT.PO', 'OTHER.PO']),
+    );
+    expect(mockedCore.warning).toHaveBeenCalledWith(
+      expect.stringContaining('Drift detected: 2 server file(s)'),
+    );
   });
 
   it('should mask sensitive inputs', async () => {
