@@ -51,9 +51,7 @@ describe('commitPulledChanges - commit-branch guard', () => {
   it('throws when workspace is in detached HEAD state', async () => {
     mockHeadBranch('HEAD');
 
-    await expect(commitPulledChanges(baseConfig())).rejects.toThrow(
-      /detached HEAD state/,
-    );
+    await expect(commitPulledChanges(baseConfig())).rejects.toThrow(/detached HEAD state/);
     expect(mockedExec).toHaveBeenCalledTimes(1);
   });
 
@@ -89,8 +87,6 @@ describe('commitPulledChanges - commit-branch guard', () => {
     await commitPulledChanges(baseConfig({ isDryRun: true }));
 
     expect(mockedExec).not.toHaveBeenCalled();
-    expect(mockedCore.info).toHaveBeenCalledWith(
-      expect.stringContaining('Dry run'),
-    );
+    expect(mockedCore.info).toHaveBeenCalledWith(expect.stringContaining('Dry run'));
   });
 });

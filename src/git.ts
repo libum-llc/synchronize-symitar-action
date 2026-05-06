@@ -47,11 +47,7 @@ export async function commitPulledChanges(config: CommitPulledChangesConfig): Pr
   // Otherwise the diff is computed against a different branch's tree and the
   // resulting commit silently overwrites commit-branch with that branch's content.
   if (config.commitBranch) {
-    const headBranch = await getExecOutput(
-      'git',
-      ['rev-parse', '--abbrev-ref', 'HEAD'],
-      workspace,
-    );
+    const headBranch = await getExecOutput('git', ['rev-parse', '--abbrev-ref', 'HEAD'], workspace);
     if (headBranch === 'HEAD') {
       throw new Error(
         `commit-branch is "${config.commitBranch}" but the workspace is in a detached HEAD state. ` +

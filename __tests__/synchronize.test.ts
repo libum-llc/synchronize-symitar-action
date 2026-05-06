@@ -147,6 +147,7 @@ describe('synchronize', () => {
           },
           preserveServerFiles: [],
           pullPreservedOnly: false,
+          compareMode: 'checksum',
         },
         false,
       );
@@ -278,6 +279,7 @@ describe('synchronize', () => {
           },
           preserveServerFiles: [],
           pullPreservedOnly: false,
+          compareMode: 'checksum',
         },
         false,
       );
