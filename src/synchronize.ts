@@ -138,7 +138,7 @@ export async function synchronizeToSymitar(config: SynchronizeConfig): Promise<S
     },
     preserveServerFiles: config.preserveServerFiles || [],
     pullPreservedOnly: config.pullPreservedOnly || false,
-    compareMode: 'checksum',
+    compareMode: 'quick',
   };
 
   core.info(`${logPrefix} Using ${config.connectionType.toUpperCase()} connection`);
