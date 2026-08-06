@@ -644,6 +644,31 @@ describe('task-orchestration', () => {
         );
       });
 
+      it('should read the pull request inputs', () => {
+        setActionInputs({
+          'pull-request-branch': 'chore/pulled',
+          'pull-request-target-branch': 'main',
+          'pull-request-title': 'chore: pulled',
+          // The GitHub-native spelling of pipelines' pullRequestDescription
+          'pull-request-body': 'Pulled by the action.',
+        });
+
+        const config = loadSynchronizeConfig();
+
+        expect(config.pullRequestBranch).toBe('chore/pulled');
+        expect(config.pullRequestTargetBranch).toBe('main');
+        expect(config.pullRequestTitle).toBe('chore: pulled');
+        expect(config.pullRequestDescription).toBe('Pulled by the action.');
+      });
+
+      it('should ignore a pull-request-description input', () => {
+        setActionInputs({ 'pull-request-description': 'wrong name' });
+
+        expect(loadSynchronizeConfig().pullRequestDescription).toBe(
+          'Auto-generated pull of server-managed Symitar files.',
+        );
+      });
+
       it('should throw InputError when both commit and pull request are enabled', () => {
         setActionInputs({
           'sync-mode': 'pull',

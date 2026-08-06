@@ -90,7 +90,7 @@ const PENDING_ACTION_INPUTS = [
   'pull-request-branch',
   'pull-request-target-branch',
   'pull-request-title',
-  'pull-request-description',
+  'pull-request-body',
 ];
 
 describe('utils', () => {
@@ -139,6 +139,12 @@ describe('utils', () => {
         'validateIgnorePowerOns',
         'validate-ignore-power-ons',
         'validate-ignore-list',
+      ],
+      // The GitHub REST API calls this field `body`
+      [
+        'pullRequestDescription',
+        'pull-request-description',
+        'pull-request-body',
       ],
     ])(
       'should override %s rather than transforming it to %s',

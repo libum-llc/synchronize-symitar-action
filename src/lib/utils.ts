@@ -11,6 +11,11 @@ const INPUT_NAME_OVERRIDES: Record<string, string> = {
   isDryRun: 'dry-run',
   installPowerOns: 'install-poweron-list',
   validateIgnorePowerOns: 'validate-ignore-list',
+  // Not `pull-request-description`: the GitHub REST API calls this field
+  // `body`, so the action input takes the GitHub-native spelling while the
+  // vendored code keeps the pipelines-side name. Deliberate - do not "fix"
+  // this into a mechanical camel -> kebab transform.
+  pullRequestDescription: 'pull-request-body',
 };
 
 /**
