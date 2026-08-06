@@ -17,13 +17,21 @@ jobs:
       -
         name: Setup pnpm
         uses: pnpm/action-setup@v3
-        with:
-          version: latest-9
+        # No `version:` on purpose — action-setup then reads `packageManager`
+        # from package.json, so CI uses the exact pnpm that produced
+        # pnpm-lock.yaml and the committed dist/. pnpm majors hoist
+        # node_modules differently, which changes what ncc bundles, so a
+        # local/CI mismatch makes the "Check dist" step unsatisfiable.
       -
         name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Must match the Node used to build the committed dist/. ncc output
+          # differs between Node majors, so a mismatch makes the "Check dist"
+          # step below unsatisfiable: the bundle can be correct on one version
+          # and dirty on the other. 24 matches poweron-pipelines and the Node
+          # that GitHub now actually runs node20 actions on.
+          node-version: 24
           cache: pnpm
           registry-url: 'https://npm.pkg.github.com'
           scope: '@libum-llc'
@@ -42,17 +50,27 @@ jobs:
         name: Build
         run: pnpm build
       -
+        # `action.yml` ships `dist/index.js`, so the committed bundle - not
+        # src/ - is what consumers actually run. The `Build` step above just
+        # rewrote dist/ in place, so anything git now reports as dirty or
+        # untracked under dist/ is a difference between what is committed and
+        # what src/ produces.
+        #
+        # This step previously snapshotted dist/ *after* the build, rebuilt,
+        # and compared the two snapshots. Both were post-build, so it compared
+        # the build to itself: it proved reproducibility and could never detect
+        # a stale committed dist/. That blind spot is why a v1 bundle survived
+        # undetected through six green builds. Do not reorder `Build` after
+        # this step, and do not reintroduce a post-build snapshot as the
+        # baseline - the committed tree is the only meaningful baseline.
         name: Check dist
         run: |
-          find dist -type f -exec sha256sum {} \; | sort > /tmp/dist-before.txt
-          pnpm build
-          find dist -type f -exec sha256sum {} \; | sort > /tmp/dist-after.txt
-          if ! diff -q /tmp/dist-before.txt /tmp/dist-after.txt > /dev/null; then
-            echo "Error: dist/ directory is out of sync with the build"
-            echo "Please run 'pnpm build' and commit the changes"
+          if [ -n "$(git status --porcelain -- dist/)" ]; then
+            echo "Error: the committed dist/ does not match a fresh build of src/"
+            echo "Please run 'pnpm build' and commit the result."
             echo ""
-            echo "Differences:"
-            diff /tmp/dist-before.txt /tmp/dist-after.txt || true
+            git status --porcelain -- dist/
+            git diff --stat -- dist/
             exit 1
           fi
-          echo "dist/ is up to date"
+          echo "dist/ matches a fresh build of src/"

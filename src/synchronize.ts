@@ -10,7 +10,11 @@ import {
   SyncFilesResult,
 } from '@libum-llc/symitar';
 import { validateApiKey } from './subscription';
-import { DirectoryType, getDirectoryConfig, getInstallList } from './directory-config';
+import {
+  DirectoryType,
+  getDirectoryConfig,
+  getInstallList,
+} from './directory-config';
 
 export type ConnectionType = 'https' | 'ssh';
 export type SyncMode = 'push' | 'pull' | 'mirror';
@@ -54,11 +58,14 @@ export interface SynchronizeResult {
   outlierFiles: string[];
 }
 
-function createProgressCallback(logPrefix: string): (progress: SyncFilesProgress) => void {
+function createProgressCallback(
+  logPrefix: string,
+): (progress: SyncFilesProgress) => void {
   let lastMessage = '';
 
   return (progress: SyncFilesProgress) => {
-    const phase = progress.phase.charAt(0).toUpperCase() + progress.phase.slice(1);
+    const phase =
+      progress.phase.charAt(0).toUpperCase() + progress.phase.slice(1);
     let message: string;
 
     if (progress.currentFile && progress.total > 0) {
@@ -109,7 +116,9 @@ function getSyncTransport(method: SyncMethod): SymitarSyncTransport {
 /**
  * Synchronize files to a Symitar server using HTTPS or SSH.
  */
-export async function synchronizeToSymitar(config: SynchronizeConfig): Promise<SynchronizeResult> {
+export async function synchronizeToSymitar(
+  config: SynchronizeConfig,
+): Promise<SynchronizeResult> {
   const { logPrefix } = config;
 
   // Validate API key first
@@ -119,7 +128,10 @@ export async function synchronizeToSymitar(config: SynchronizeConfig): Promise<S
   const directoryConfig = getDirectoryConfig(config.directoryType);
 
   // Get install list (only for PowerOns)
-  const installList = getInstallList(config.directoryType, config.installPowerOnList);
+  const installList = getInstallList(
+    config.directoryType,
+    config.installPowerOnList,
+  );
 
   // Get sync mode enum
   const syncMode = getSyncMode(config.syncMode);
@@ -130,7 +142,7 @@ export async function synchronizeToSymitar(config: SynchronizeConfig): Promise<S
   // Build sync options
   const syncOptions: SyncFilesOptions = {
     transport: syncTransport,
-    concurrency: config.sftpConcurrency,
+    maxConcurrentSFTPOperations: config.sftpConcurrency,
     onProgress: createProgressCallback(logPrefix),
     powerOn: {
       installList,
@@ -141,7 +153,9 @@ export async function synchronizeToSymitar(config: SynchronizeConfig): Promise<S
     compareMode: 'quick',
   };
 
-  core.info(`${logPrefix} Using ${config.connectionType.toUpperCase()} connection`);
+  core.info(
+    `${logPrefix} Using ${config.connectionType.toUpperCase()} connection`,
+  );
   core.info(`${logPrefix} Sync method: ${config.syncMethod.toUpperCase()}`);
   if (config.syncMethod === 'sftp') {
     core.info(`${logPrefix} SFTP concurrency: ${config.sftpConcurrency}`);
@@ -224,7 +238,9 @@ async function synchronizeViaHTTPs(
   const client = new SymitarHTTPs(baseUrl, symitarConfig, logLevel, sshConfig);
 
   try {
-    core.info(`${logPrefix} Starting synchronization${config.isDryRun ? ' (DRY RUN)' : ''}...`);
+    core.info(
+      `${logPrefix} Starting synchronization${config.isDryRun ? ' (DRY RUN)' : ''}...`,
+    );
 
     const result = await client.syncFiles(
       config.localDirectoryPath,
@@ -252,7 +268,9 @@ async function synchronizeViaSSH(
 ): Promise<SyncFilesResult> {
   const { logPrefix } = config;
 
-  core.info(`${logPrefix} Connecting to ${config.symitarHostname}:${config.sshPort} via SSH...`);
+  core.info(
+    `${logPrefix} Connecting to ${config.symitarHostname}:${config.sshPort} via SSH...`,
+  );
 
   const logLevel = config.debug ? 'debug' : 'info';
   const client = new SymitarSSH(
@@ -269,7 +287,9 @@ async function synchronizeViaSSH(
     await client.isReady;
     core.info(`${logPrefix} Connected successfully`);
 
-    core.info(`${logPrefix} Starting synchronization${config.isDryRun ? ' (DRY RUN)' : ''}...`);
+    core.info(
+      `${logPrefix} Starting synchronization${config.isDryRun ? ' (DRY RUN)' : ''}...`,
+    );
 
     const symitarConfig = {
       symNumber: config.symNumber,

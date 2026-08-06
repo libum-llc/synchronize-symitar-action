@@ -97,14 +97,21 @@ export const validateApiKey = async (apiKey: string): Promise<void> => {
     console.error(
       `${logPrefix} No API key provided. Please make sure 'api-key' is set properly in your workflow.`,
     );
-    throw new AuthenticationError('PowerOn Pipelines API Key is missing', normalizedApiKey, '');
+    throw new AuthenticationError(
+      'PowerOn Pipelines API Key is missing',
+      normalizedApiKey,
+      '',
+    );
   }
 
   const url = `https://${sstStagePrefix}license${isSandbox ? '.libum-sandbox' : ''}.libum.io/subscriptionsByApiKey?product=poweron-pipelines`;
 
   for (let attempt = 1; attempt <= MAX_API_RETRIES; attempt++) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), API_REQUEST_TIMEOUT_MS);
+    const timeout = setTimeout(
+      () => controller.abort(),
+      API_REQUEST_TIMEOUT_MS,
+    );
 
     try {
       const response = await fetch(url, {
@@ -157,8 +164,11 @@ export const validateApiKey = async (apiKey: string): Promise<void> => {
       console.info(`${logPrefix} API key validation successful`);
       return;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`${logPrefix} Validation attempt ${attempt} failed: ${errorMessage}`);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      console.error(
+        `${logPrefix} Validation attempt ${attempt} failed: ${errorMessage}`,
+      );
 
       // If it's our custom error or last attempt, throw immediately
       if (
@@ -166,7 +176,10 @@ export const validateApiKey = async (apiKey: string): Promise<void> => {
         error instanceof ConnectionError ||
         attempt >= MAX_API_RETRIES
       ) {
-        if (error instanceof AuthenticationError || error instanceof ConnectionError) {
+        if (
+          error instanceof AuthenticationError ||
+          error instanceof ConnectionError
+        ) {
           throw error;
         }
 

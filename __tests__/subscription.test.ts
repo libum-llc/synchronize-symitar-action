@@ -1,4 +1,8 @@
-import { validateApiKey, AuthenticationError, ConnectionError } from '../src/subscription';
+import {
+  validateApiKey,
+  AuthenticationError,
+  ConnectionError,
+} from '../src/subscription';
 
 // Mock fetch
 const mockFetch = jest.fn();
@@ -60,7 +64,9 @@ describe('subscription', () => {
         }),
       });
 
-      await expect(validateApiKey('invalid-api-key')).rejects.toThrow(AuthenticationError);
+      await expect(validateApiKey('invalid-api-key')).rejects.toThrow(
+        AuthenticationError,
+      );
     });
 
     it('should throw AuthenticationError when no subscriptions exist', async () => {
@@ -72,7 +78,9 @@ describe('subscription', () => {
         }),
       });
 
-      await expect(validateApiKey('api-key-no-subs')).rejects.toThrow(AuthenticationError);
+      await expect(validateApiKey('api-key-no-subs')).rejects.toThrow(
+        AuthenticationError,
+      );
     });
 
     it('should throw AuthenticationError on HTTP error response', async () => {
@@ -82,7 +90,9 @@ describe('subscription', () => {
         statusText: 'Unauthorized',
       });
 
-      await expect(validateApiKey('bad-api-key')).rejects.toThrow(AuthenticationError);
+      await expect(validateApiKey('bad-api-key')).rejects.toThrow(
+        AuthenticationError,
+      );
     });
 
     it('should throw AuthenticationError on invalid response format', async () => {
@@ -93,7 +103,9 @@ describe('subscription', () => {
         }),
       });
 
-      await expect(validateApiKey('api-key')).rejects.toThrow(AuthenticationError);
+      await expect(validateApiKey('api-key')).rejects.toThrow(
+        AuthenticationError,
+      );
     });
 
     it('should retry on network failure and throw ConnectionError after max retries', async () => {
@@ -106,7 +118,11 @@ describe('subscription', () => {
 
   describe('AuthenticationError', () => {
     it('should contain apiKey and host properties', () => {
-      const error = new AuthenticationError('test message', 'test-key', 'test-host');
+      const error = new AuthenticationError(
+        'test message',
+        'test-key',
+        'test-host',
+      );
       expect(error.message).toBe('test message');
       expect(error.apiKey).toBe('test-key');
       expect(error.host).toBe('test-host');
@@ -117,7 +133,13 @@ describe('subscription', () => {
   describe('ConnectionError', () => {
     it('should contain host, port, isSSL, and originalError properties', () => {
       const originalError = new Error('original');
-      const error = new ConnectionError('test message', 'test-host', 443, true, originalError);
+      const error = new ConnectionError(
+        'test message',
+        'test-host',
+        443,
+        true,
+        originalError,
+      );
       expect(error.message).toBe('test message');
       expect(error.host).toBe('test-host');
       expect(error.port).toBe(443);

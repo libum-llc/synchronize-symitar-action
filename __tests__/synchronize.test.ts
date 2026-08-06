@@ -60,9 +60,13 @@ import { SymitarSSH, SymitarHTTPs } from '@libum-llc/symitar';
 import { validateApiKey } from '../src/subscription';
 
 const mockedCore = core as jest.Mocked<typeof core>;
-const mockedValidateApiKey = validateApiKey as jest.MockedFunction<typeof validateApiKey>;
+const mockedValidateApiKey = validateApiKey as jest.MockedFunction<
+  typeof validateApiKey
+>;
 const MockedSymitarSSH = SymitarSSH as jest.MockedClass<typeof SymitarSSH>;
-const MockedSymitarHTTPs = SymitarHTTPs as jest.MockedClass<typeof SymitarHTTPs>;
+const MockedSymitarHTTPs = SymitarHTTPs as jest.MockedClass<
+  typeof SymitarHTTPs
+>;
 
 describe('synchronize', () => {
   const defaultConfig: SynchronizeConfig = {
@@ -133,13 +137,17 @@ describe('synchronize', () => {
       await synchronizeToSymitar(defaultConfig);
 
       expect(mockSSHSyncFiles).toHaveBeenCalledWith(
-        { symNumber: 627, symitarUserNumber: '1', symitarUserPassword: 'questpass' },
+        {
+          symNumber: 627,
+          symitarUserNumber: '1',
+          symitarUserPassword: 'questpass',
+        },
         './powerons/',
         'REPWRITERSPECS',
         'push',
         {
           transport: 'sftp',
-          concurrency: 4,
+          maxConcurrentSFTPOperations: 4,
           onProgress: expect.any(Function),
           powerOn: {
             installList: ['FILE1.PO'],
@@ -169,7 +177,10 @@ describe('synchronize', () => {
     });
 
     it('should pass validateIgnoreList to syncFiles', async () => {
-      await synchronizeToSymitar({ ...defaultConfig, validateIgnoreList: ['TEST.PO'] });
+      await synchronizeToSymitar({
+        ...defaultConfig,
+        validateIgnoreList: ['TEST.PO'],
+      });
 
       expect(mockSSHSyncFiles).toHaveBeenCalledWith(
         expect.anything(),
@@ -211,7 +222,7 @@ describe('synchronize', () => {
         expect.anything(),
         expect.anything(),
         expect.objectContaining({
-          concurrency: 8,
+          maxConcurrentSFTPOperations: 8,
           onProgress: expect.any(Function),
         }),
         expect.anything(),
@@ -227,7 +238,9 @@ describe('synchronize', () => {
     it('should close connection even on error', async () => {
       mockSSHSyncFiles.mockRejectedValue(new Error('Sync failed'));
 
-      await expect(synchronizeToSymitar(defaultConfig)).rejects.toThrow('Sync failed');
+      await expect(synchronizeToSymitar(defaultConfig)).rejects.toThrow(
+        'Sync failed',
+      );
       expect(mockSSHEnd).toHaveBeenCalled();
     });
   });
@@ -244,7 +257,11 @@ describe('synchronize', () => {
 
       expect(MockedSymitarHTTPs).toHaveBeenCalledWith(
         'https://symitar.example.com:42627',
-        { symNumber: 627, symitarUserNumber: '1', symitarUserPassword: 'questpass' },
+        {
+          symNumber: 627,
+          symitarUserNumber: '1',
+          symitarUserPassword: 'questpass',
+        },
         'info',
         { port: 22, username: 'testuser', password: 'testpass' },
       );
@@ -271,7 +288,7 @@ describe('synchronize', () => {
         'push',
         {
           transport: 'sftp',
-          concurrency: 4,
+          maxConcurrentSFTPOperations: 4,
           onProgress: expect.any(Function),
           powerOn: {
             installList: ['FILE1.PO'],
@@ -294,7 +311,9 @@ describe('synchronize', () => {
     it('should close connection even on error', async () => {
       mockHTTPsSyncFiles.mockRejectedValue(new Error('Sync failed'));
 
-      await expect(synchronizeToSymitar(httpsConfig)).rejects.toThrow('Sync failed');
+      await expect(synchronizeToSymitar(httpsConfig)).rejects.toThrow(
+        'Sync failed',
+      );
       expect(mockHTTPsEnd).toHaveBeenCalled();
     });
   });
@@ -366,8 +385,12 @@ describe('synchronize', () => {
     it('should log connection status for SSH', async () => {
       await synchronizeToSymitar(defaultConfig);
 
-      expect(mockedCore.info).toHaveBeenCalledWith(expect.stringContaining('Connecting'));
-      expect(mockedCore.info).toHaveBeenCalledWith(expect.stringContaining('Connected'));
+      expect(mockedCore.info).toHaveBeenCalledWith(
+        expect.stringContaining('Connecting'),
+      );
+      expect(mockedCore.info).toHaveBeenCalledWith(
+        expect.stringContaining('Connected'),
+      );
     });
 
     it('should log connection status for HTTPS', async () => {
@@ -385,14 +408,28 @@ describe('synchronize', () => {
     it('should log sync mode and directory type', async () => {
       await synchronizeToSymitar(defaultConfig);
 
-      expect(mockedCore.info).toHaveBeenCalledWith(expect.stringContaining('push'));
-      expect(mockedCore.info).toHaveBeenCalledWith(expect.stringContaining('PowerOns'));
+      expect(mockedCore.info).toHaveBeenCalledWith(
+        expect.stringContaining('push'),
+      );
+      expect(mockedCore.info).toHaveBeenCalledWith(
+        expect.stringContaining('PowerOns'),
+      );
     });
 
     it('should log sync progress updates from the library callback', async () => {
       mockSSHSyncFiles.mockImplementation(
-        async (_symitarConfig, _localDirectory, _remoteDirectory, _syncMode, syncOptions) => {
-          syncOptions.onProgress?.({ phase: 'connecting', current: 0, total: 0 });
+        async (
+          _symitarConfig,
+          _localDirectory,
+          _remoteDirectory,
+          _syncMode,
+          syncOptions,
+        ) => {
+          syncOptions.onProgress?.({
+            phase: 'connecting',
+            current: 0,
+            total: 0,
+          });
           syncOptions.onProgress?.({ phase: 'scanning', current: 0, total: 0 });
           syncOptions.onProgress?.({
             phase: 'syncing',
@@ -410,7 +447,9 @@ describe('synchronize', () => {
 
       expect(mockedCore.info).toHaveBeenCalledWith('[Test] Connecting');
       expect(mockedCore.info).toHaveBeenCalledWith('[Test] Scanning');
-      expect(mockedCore.info).toHaveBeenCalledWith('[Test] Syncing 1/3 (FILE1.PO)');
+      expect(mockedCore.info).toHaveBeenCalledWith(
+        '[Test] Syncing 1/3 (FILE1.PO)',
+      );
       expect(mockedCore.info).toHaveBeenCalledWith('[Test] Complete 3/3');
     });
   });

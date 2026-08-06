@@ -1,5 +1,10 @@
 import * as core from '@actions/core';
-import { synchronizeToSymitar, ConnectionType, SyncMode, SyncMethod } from './synchronize';
+import {
+  synchronizeToSymitar,
+  ConnectionType,
+  SyncMode,
+  SyncMethod,
+} from './synchronize';
 import { version } from '../package.json';
 import { AuthenticationError, ConnectionError } from './subscription';
 import {
@@ -23,19 +28,33 @@ export async function run(): Promise<void> {
 
   try {
     // Get inputs
-    const directoryTypeInput = core.getInput('directory-type', { required: true });
-    const localDirectoryPathInput = core.getInput('local-directory-path', { required: false });
-    const connectionType = core.getInput('connection-type', { required: true }) as ConnectionType;
+    const directoryTypeInput = core.getInput('directory-type', {
+      required: true,
+    });
+    const localDirectoryPathInput = core.getInput('local-directory-path', {
+      required: false,
+    });
+    const connectionType = core.getInput('connection-type', {
+      required: true,
+    }) as ConnectionType;
     const syncMode = core.getInput('sync-mode', { required: true }) as SyncMode;
     const isDryRun = core.getInput('dry-run', { required: false }) === 'true';
-    const symitarHostname = core.getInput('symitar-hostname', { required: true });
-    const symitarAppPortInput = core.getInput('symitar-app-port', { required: false });
+    const symitarHostname = core.getInput('symitar-hostname', {
+      required: true,
+    });
+    const symitarAppPortInput = core.getInput('symitar-app-port', {
+      required: false,
+    });
     const sshUsername = core.getInput('ssh-username', { required: true });
     const sshPassword = core.getInput('ssh-password', { required: true });
     const sshPortInput = core.getInput('ssh-port', { required: false }) || '22';
     const symNumberInput = core.getInput('sym-number', { required: true });
-    const symitarUserNumber = core.getInput('symitar-user-number', { required: true });
-    const symitarUserPassword = core.getInput('symitar-user-password', { required: true });
+    const symitarUserNumber = core.getInput('symitar-user-number', {
+      required: true,
+    });
+    const symitarUserPassword = core.getInput('symitar-user-password', {
+      required: true,
+    });
     const apiKey = core.getInput('api-key', { required: true }).trim();
     const installPowerOnListInput =
       core.getInput('install-poweron-list', { required: false }) || '';
@@ -43,17 +62,23 @@ export async function run(): Promise<void> {
       core.getInput('validate-ignore-list', { required: false }) || '';
     const preserveServerFilesInput =
       core.getInput('preserve-server-files', { required: false }) || '';
-    const pullPreservedOnly = core.getInput('pull-preserved-only', { required: false }) === 'true';
+    const pullPreservedOnly =
+      core.getInput('pull-preserved-only', { required: false }) === 'true';
     const commitPulledChangesEnabled =
       core.getInput('commit-pulled-changes', { required: false }) === 'true';
     const commitMessage =
       core.getInput('commit-message', { required: false }) ||
       'chore: sync server-managed Symitar files [skip ci]';
-    const commitBranch = core.getInput('commit-branch', { required: false }) || undefined;
-    const gitUserName = core.getInput('git-user-name', { required: false }) || 'libum-bot';
-    const gitUserEmail = core.getInput('git-user-email', { required: false }) || 'bot@libum.io';
-    const syncMethodInput = core.getInput('sync-method', { required: false }) || 'sftp';
-    const sftpConcurrencyInput = core.getInput('sftp-concurrency', { required: false }) || '4';
+    const commitBranch =
+      core.getInput('commit-branch', { required: false }) || undefined;
+    const gitUserName =
+      core.getInput('git-user-name', { required: false }) || 'libum-bot';
+    const gitUserEmail =
+      core.getInput('git-user-email', { required: false }) || 'bot@libum.io';
+    const syncMethodInput =
+      core.getInput('sync-method', { required: false }) || 'sftp';
+    const sftpConcurrencyInput =
+      core.getInput('sftp-concurrency', { required: false }) || '4';
     const debug = core.getInput('debug', { required: false }) === 'true';
 
     // Mask sensitive information
@@ -71,28 +96,38 @@ export async function run(): Promise<void> {
 
     // Validate connection type
     if (connectionType !== 'https' && connectionType !== 'ssh') {
-      throw new Error(`Invalid connection type: ${connectionType}. Must be 'https' or 'ssh'`);
+      throw new Error(
+        `Invalid connection type: ${connectionType}. Must be 'https' or 'ssh'`,
+      );
     }
 
     // Validate sync mode
     if (syncMode !== 'push' && syncMode !== 'pull' && syncMode !== 'mirror') {
-      throw new Error(`Invalid sync mode: ${syncMode}. Must be 'push', 'pull', or 'mirror'`);
+      throw new Error(
+        `Invalid sync mode: ${syncMode}. Must be 'push', 'pull', or 'mirror'`,
+      );
     }
 
     if (commitPulledChangesEnabled && syncMode !== 'pull') {
-      throw new Error('commit-pulled-changes can only be used when sync-mode is pull');
+      throw new Error(
+        'commit-pulled-changes can only be used when sync-mode is pull',
+      );
     }
 
     // Validate sync method
     if (syncMethodInput !== 'sftp' && syncMethodInput !== 'rsync') {
-      throw new Error(`Invalid sync method: ${syncMethodInput}. Must be 'sftp' or 'rsync'`);
+      throw new Error(
+        `Invalid sync method: ${syncMethodInput}. Must be 'sftp' or 'rsync'`,
+      );
     }
     const syncMethod: SyncMethod = syncMethodInput;
 
     // Validate and parse SFTP concurrency
     const sftpConcurrency = parseInt(sftpConcurrencyInput, 10);
     if (isNaN(sftpConcurrency) || sftpConcurrency < 1 || sftpConcurrency > 20) {
-      throw new Error(`Invalid SFTP concurrency: ${sftpConcurrencyInput}. Must be between 1-20`);
+      throw new Error(
+        `Invalid SFTP concurrency: ${sftpConcurrencyInput}. Must be between 1-20`,
+      );
     }
 
     // Validate hostname format
@@ -103,17 +138,25 @@ export async function run(): Promise<void> {
     // Validate and parse SSH port
     const sshPort = parseInt(sshPortInput, 10);
     if (isNaN(sshPort) || sshPort < 1 || sshPort > 65535) {
-      throw new Error(`Invalid SSH port: ${sshPortInput}. Must be between 1-65535`);
+      throw new Error(
+        `Invalid SSH port: ${sshPortInput}. Must be between 1-65535`,
+      );
     }
 
     // Validate and parse Symitar app port (required for HTTPS)
     let symitarAppPort: number | undefined;
     if (connectionType === 'https') {
       if (!symitarAppPortInput) {
-        throw new Error('symitar-app-port is required when connection-type is https');
+        throw new Error(
+          'symitar-app-port is required when connection-type is https',
+        );
       }
       symitarAppPort = parseInt(symitarAppPortInput, 10);
-      if (isNaN(symitarAppPort) || symitarAppPort < 1 || symitarAppPort > 65535) {
+      if (
+        isNaN(symitarAppPort) ||
+        symitarAppPort < 1 ||
+        symitarAppPort > 65535
+      ) {
         throw new Error(
           `Invalid Symitar app port: ${symitarAppPortInput}. Must be between 1-65535`,
         );
@@ -123,7 +166,9 @@ export async function run(): Promise<void> {
     // Parse sym number
     const symNumber = parseInt(symNumberInput, 10);
     if (isNaN(symNumber) || symNumber < 0 || symNumber > 9999) {
-      throw new Error(`Invalid sym number: ${symNumberInput}. Must be between 0-9999`);
+      throw new Error(
+        `Invalid sym number: ${symNumberInput}. Must be between 0-9999`,
+      );
     }
 
     // Get directory config
@@ -165,15 +210,21 @@ export async function run(): Promise<void> {
     core.info(`${logPrefix} API Key: ${apiKey ? '✓ provided' : '✗ missing'}`);
 
     if (directoryConfig.supportsInstall && installPowerOnList.length > 0) {
-      core.info(`${logPrefix} Install PowerOn List: ${installPowerOnList.join(', ')}`);
+      core.info(
+        `${logPrefix} Install PowerOn List: ${installPowerOnList.join(', ')}`,
+      );
     }
 
     if (validateIgnoreList.length > 0) {
-      core.info(`${logPrefix} Validate Ignore List: ${validateIgnoreList.join(', ')}`);
+      core.info(
+        `${logPrefix} Validate Ignore List: ${validateIgnoreList.join(', ')}`,
+      );
     }
 
     if (preserveServerFiles.length > 0) {
-      core.info(`${logPrefix} Preserve Server Files: ${preserveServerFiles.join(', ')}`);
+      core.info(
+        `${logPrefix} Preserve Server Files: ${preserveServerFiles.join(', ')}`,
+      );
     }
 
     if (pullPreservedOnly && preserveServerFiles.length === 0) {
@@ -285,7 +336,9 @@ export async function run(): Promise<void> {
     }
 
     if (result.outliersCount > 0) {
-      core.info(`${logPrefix} Outliers (server-side drift): ${result.outliersCount}`);
+      core.info(
+        `${logPrefix} Outliers (server-side drift): ${result.outliersCount}`,
+      );
       for (const file of result.outlierFiles) {
         core.info(`${logPrefix}   ⚠ ${file}`);
       }
@@ -303,7 +356,9 @@ export async function run(): Promise<void> {
     // Handle authentication and connection errors specially
     if (error instanceof AuthenticationError) {
       core.error(`${logPrefix} Authentication failed: ${error.message}`);
-      core.error(`${logPrefix} API Key: ${error.apiKey ? '***' : 'not provided'}`);
+      core.error(
+        `${logPrefix} API Key: ${error.apiKey ? '***' : 'not provided'}`,
+      );
       core.error(`${logPrefix} Host: ${error.host}`);
       if (error.stack) {
         core.debug(`${logPrefix} Stack trace: ${error.stack}`);
@@ -313,9 +368,13 @@ export async function run(): Promise<void> {
       core.error(`${logPrefix} Connection failed: ${error.message}`);
       core.error(`${logPrefix} Host: ${error.host}:${error.port}`);
       if (error.originalError) {
-        core.error(`${logPrefix} Original error: ${error.originalError.message}`);
+        core.error(
+          `${logPrefix} Original error: ${error.originalError.message}`,
+        );
         if (error.originalError.stack) {
-          core.debug(`${logPrefix} Original stack trace: ${error.originalError.stack}`);
+          core.debug(
+            `${logPrefix} Original stack trace: ${error.originalError.stack}`,
+          );
         }
       }
       if (error.stack) {

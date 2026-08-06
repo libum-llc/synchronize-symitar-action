@@ -17,7 +17,8 @@ export interface DirectoryTypeConfig {
 /**
  * Supported directory types for synchronization
  */
-export type DirectoryType = 'powerOns' | 'letterFiles' | 'dataFiles' | 'helpFiles';
+export type DirectoryType =
+  'powerOns' | 'letterFiles' | 'dataFiles' | 'helpFiles';
 
 /**
  * Configuration mapping for all supported directory types
@@ -63,7 +64,9 @@ export function isValidDirectoryType(type: string): type is DirectoryType {
 export function getDirectoryConfig(type: string): DirectoryTypeConfig {
   if (!isValidDirectoryType(type)) {
     const validTypes = Object.keys(DIRECTORY_CONFIG).join(', ');
-    throw new Error(`Invalid directory type: ${type}. Must be one of: ${validTypes}`);
+    throw new Error(
+      `Invalid directory type: ${type}. Must be one of: ${validTypes}`,
+    );
   }
   return DIRECTORY_CONFIG[type];
 }
@@ -73,7 +76,10 @@ export function getDirectoryConfig(type: string): DirectoryTypeConfig {
  * 1. Direct input (inputPath)
  * 2. Default path for the directory type
  */
-export function getLocalDirectoryPath(directoryType: DirectoryType, inputPath?: string): string {
+export function getLocalDirectoryPath(
+  directoryType: DirectoryType,
+  inputPath?: string,
+): string {
   if (inputPath) {
     return inputPath;
   }
@@ -85,7 +91,10 @@ export function getLocalDirectoryPath(directoryType: DirectoryType, inputPath?: 
  * Gets the install list based on directory type
  * Only PowerOns support installation
  */
-export function getInstallList(directoryType: DirectoryType, installPowerOns: string[]): string[] {
+export function getInstallList(
+  directoryType: DirectoryType,
+  installPowerOns: string[],
+): string[] {
   const config = DIRECTORY_CONFIG[directoryType];
   return config.supportsInstall ? installPowerOns : [];
 }

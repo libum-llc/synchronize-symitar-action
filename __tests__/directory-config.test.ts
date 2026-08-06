@@ -5,7 +5,6 @@ import {
   getLocalDirectoryPath,
   getInstallList,
   calculateTotalChanges,
-  DirectoryType,
 } from '../src/directory-config';
 
 // Mock @libum-llc/symitar enums

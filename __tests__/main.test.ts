@@ -57,7 +57,9 @@ import { run } from '../src/main';
 import { synchronizeToSymitar } from '../src/synchronize';
 import { AuthenticationError, ConnectionError } from '../src/subscription';
 
-const mockedSynchronize = synchronizeToSymitar as jest.MockedFunction<typeof synchronizeToSymitar>;
+const mockedSynchronize = synchronizeToSymitar as jest.MockedFunction<
+  typeof synchronizeToSymitar
+>;
 
 // Helper function to get default inputs
 function getDefaultInputs(): Record<string, string> {
@@ -161,7 +163,9 @@ describe('main', () => {
   it('should validate hostname format', async () => {
     const inputs = getDefaultInputs();
     inputs['symitar-hostname'] = 'invalid hostname!';
-    mockedCore.getInput.mockImplementation((name: string) => inputs[name] || '');
+    mockedCore.getInput.mockImplementation(
+      (name: string) => inputs[name] || '',
+    );
 
     await run();
 
@@ -173,17 +177,23 @@ describe('main', () => {
   it('should validate SSH port range', async () => {
     const inputs = getDefaultInputs();
     inputs['ssh-port'] = '99999';
-    mockedCore.getInput.mockImplementation((name: string) => inputs[name] || '');
+    mockedCore.getInput.mockImplementation(
+      (name: string) => inputs[name] || '',
+    );
 
     await run();
 
-    expect(mockedCore.setFailed).toHaveBeenCalledWith(expect.stringContaining('Invalid SSH port'));
+    expect(mockedCore.setFailed).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid SSH port'),
+    );
   });
 
   it('should validate directory type', async () => {
     const inputs = getDefaultInputs();
     inputs['directory-type'] = 'invalidType';
-    mockedCore.getInput.mockImplementation((name: string) => inputs[name] || '');
+    mockedCore.getInput.mockImplementation(
+      (name: string) => inputs[name] || '',
+    );
 
     await run();
 
@@ -195,7 +205,9 @@ describe('main', () => {
   it('should validate connection type', async () => {
     const inputs = getDefaultInputs();
     inputs['connection-type'] = 'ftp';
-    mockedCore.getInput.mockImplementation((name: string) => inputs[name] || '');
+    mockedCore.getInput.mockImplementation(
+      (name: string) => inputs[name] || '',
+    );
 
     await run();
 
@@ -207,18 +219,24 @@ describe('main', () => {
   it('should validate sync mode', async () => {
     const inputs = getDefaultInputs();
     inputs['sync-mode'] = 'sync';
-    mockedCore.getInput.mockImplementation((name: string) => inputs[name] || '');
+    mockedCore.getInput.mockImplementation(
+      (name: string) => inputs[name] || '',
+    );
 
     await run();
 
-    expect(mockedCore.setFailed).toHaveBeenCalledWith(expect.stringContaining('Invalid sync mode'));
+    expect(mockedCore.setFailed).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid sync mode'),
+    );
   });
 
   it('should require symitar-app-port for HTTPS connection', async () => {
     const inputs = getDefaultInputs();
     inputs['connection-type'] = 'https';
     inputs['symitar-app-port'] = '';
-    mockedCore.getInput.mockImplementation((name: string) => inputs[name] || '');
+    mockedCore.getInput.mockImplementation(
+      (name: string) => inputs[name] || '',
+    );
 
     await run();
 
@@ -231,7 +249,9 @@ describe('main', () => {
     const inputs = getDefaultInputs();
     inputs['connection-type'] = 'https';
     inputs['symitar-app-port'] = '99999';
-    mockedCore.getInput.mockImplementation((name: string) => inputs[name] || '');
+    mockedCore.getInput.mockImplementation(
+      (name: string) => inputs[name] || '',
+    );
 
     await run();
 
@@ -243,7 +263,9 @@ describe('main', () => {
   it('should validate sym number range', async () => {
     const inputs = getDefaultInputs();
     inputs['sym-number'] = '10000';
-    mockedCore.getInput.mockImplementation((name: string) => inputs[name] || '');
+    mockedCore.getInput.mockImplementation(
+      (name: string) => inputs[name] || '',
+    );
 
     await run();
 
@@ -254,7 +276,11 @@ describe('main', () => {
 
   it('should handle AuthenticationError', async () => {
     mockedSynchronize.mockRejectedValue(
-      new AuthenticationError('API key invalid', 'test-key', 'license.libum.io'),
+      new AuthenticationError(
+        'API key invalid',
+        'test-key',
+        'license.libum.io',
+      ),
     );
 
     await run();
@@ -266,7 +292,12 @@ describe('main', () => {
 
   it('should handle ConnectionError', async () => {
     mockedSynchronize.mockRejectedValue(
-      new ConnectionError('Connection refused', 'symitar.example.com', 22, false),
+      new ConnectionError(
+        'Connection refused',
+        'symitar.example.com',
+        22,
+        false,
+      ),
     );
 
     await run();
@@ -287,7 +318,9 @@ describe('main', () => {
   it('should parse install-poweron-list correctly', async () => {
     const inputs = getDefaultInputs();
     inputs['install-poweron-list'] = 'FILE1.PO, FILE2.PO, FILE3.PO';
-    mockedCore.getInput.mockImplementation((name: string) => inputs[name] || '');
+    mockedCore.getInput.mockImplementation(
+      (name: string) => inputs[name] || '',
+    );
 
     await run();
 
@@ -301,7 +334,9 @@ describe('main', () => {
   it('should parse validate-ignore-list correctly', async () => {
     const inputs = getDefaultInputs();
     inputs['validate-ignore-list'] = 'TEST.PO, SKIP.PO';
-    mockedCore.getInput.mockImplementation((name: string) => inputs[name] || '');
+    mockedCore.getInput.mockImplementation(
+      (name: string) => inputs[name] || '',
+    );
 
     await run();
 
@@ -315,7 +350,9 @@ describe('main', () => {
   it('should parse preserve-server-files correctly', async () => {
     const inputs = getDefaultInputs();
     inputs['preserve-server-files'] = 'RD.*, PFR.*';
-    mockedCore.getInput.mockImplementation((name: string) => inputs[name] || '');
+    mockedCore.getInput.mockImplementation(
+      (name: string) => inputs[name] || '',
+    );
 
     await run();
 
@@ -331,7 +368,9 @@ describe('main', () => {
     inputs['preserve-server-files'] = 'RD.*\nPFR.*\n';
     inputs['validate-ignore-list'] = 'TEST.PO\nSKIP.PO';
     inputs['install-poweron-list'] = 'A.PO,B.PO\nC.PO';
-    mockedCore.getInput.mockImplementation((name: string) => inputs[name] || '');
+    mockedCore.getInput.mockImplementation(
+      (name: string) => inputs[name] || '',
+    );
 
     await run();
 
@@ -347,8 +386,11 @@ describe('main', () => {
   it('should parse YAML block-sequence list inputs (- prefixed)', async () => {
     const inputs = getDefaultInputs();
     inputs['preserve-server-files'] = '- RD.*\n- PFR.*\n';
-    inputs['validate-ignore-list'] = '  - ASCIICHAR.DATA\n  - RB.SYNERGY.AP.INDEX.ASCIIDATA';
-    mockedCore.getInput.mockImplementation((name: string) => inputs[name] || '');
+    inputs['validate-ignore-list'] =
+      '  - ASCIICHAR.DATA\n  - RB.SYNERGY.AP.INDEX.ASCIIDATA';
+    mockedCore.getInput.mockImplementation(
+      (name: string) => inputs[name] || '',
+    );
 
     await run();
 
@@ -363,7 +405,9 @@ describe('main', () => {
   it('should pass sym number as integer', async () => {
     const inputs = getDefaultInputs();
     inputs['sym-number'] = '7';
-    mockedCore.getInput.mockImplementation((name: string) => inputs[name] || '');
+    mockedCore.getInput.mockImplementation(
+      (name: string) => inputs[name] || '',
+    );
 
     await run();
 
@@ -378,7 +422,9 @@ describe('main', () => {
     const inputs = getDefaultInputs();
     inputs['connection-type'] = 'https';
     inputs['symitar-app-port'] = '42627';
-    mockedCore.getInput.mockImplementation((name: string) => inputs[name] || '');
+    mockedCore.getInput.mockImplementation(
+      (name: string) => inputs[name] || '',
+    );
 
     await run();
 
@@ -393,7 +439,9 @@ describe('main', () => {
   it('should pass sync mode correctly', async () => {
     const inputs = getDefaultInputs();
     inputs['sync-mode'] = 'mirror';
-    mockedCore.getInput.mockImplementation((name: string) => inputs[name] || '');
+    mockedCore.getInput.mockImplementation(
+      (name: string) => inputs[name] || '',
+    );
 
     await run();
 
@@ -407,7 +455,9 @@ describe('main', () => {
   it('should pass directory type correctly', async () => {
     const inputs = getDefaultInputs();
     inputs['directory-type'] = 'letterFiles';
-    mockedCore.getInput.mockImplementation((name: string) => inputs[name] || '');
+    mockedCore.getInput.mockImplementation(
+      (name: string) => inputs[name] || '',
+    );
 
     await run();
 

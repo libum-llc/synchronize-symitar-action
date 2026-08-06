@@ -13,7 +13,11 @@ export interface CommitPulledChangesConfig {
   logPrefix: string;
 }
 
-async function getExecOutput(command: string, args: string[], cwd?: string): Promise<string> {
+async function getExecOutput(
+  command: string,
+  args: string[],
+  cwd?: string,
+): Promise<string> {
   let output = '';
   await exec.exec(command, args, {
     cwd,
@@ -27,11 +31,15 @@ async function getExecOutput(command: string, args: string[], cwd?: string): Pro
   return output.trim();
 }
 
-export async function commitPulledChanges(config: CommitPulledChangesConfig): Promise<void> {
+export async function commitPulledChanges(
+  config: CommitPulledChangesConfig,
+): Promise<void> {
   if (!config.enabled) return;
 
   if (config.syncMode !== 'pull') {
-    throw new Error('commit-pulled-changes can only be used when sync-mode is pull');
+    throw new Error(
+      'commit-pulled-changes can only be used when sync-mode is pull',
+    );
   }
 
   if (config.isDryRun) {
@@ -47,7 +55,11 @@ export async function commitPulledChanges(config: CommitPulledChangesConfig): Pr
   // Otherwise the diff is computed against a different branch's tree and the
   // resulting commit silently overwrites commit-branch with that branch's content.
   if (config.commitBranch) {
-    const headBranch = await getExecOutput('git', ['rev-parse', '--abbrev-ref', 'HEAD'], workspace);
+    const headBranch = await getExecOutput(
+      'git',
+      ['rev-parse', '--abbrev-ref', 'HEAD'],
+      workspace,
+    );
     if (headBranch === 'HEAD') {
       throw new Error(
         `commit-branch is "${config.commitBranch}" but the workspace is in a detached HEAD state. ` +
@@ -64,9 +76,15 @@ export async function commitPulledChanges(config: CommitPulledChangesConfig): Pr
     }
   }
 
-  await exec.exec('git', ['config', 'user.name', config.gitUserName], { cwd: workspace });
-  await exec.exec('git', ['config', 'user.email', config.gitUserEmail], { cwd: workspace });
-  await exec.exec('git', ['add', '--', config.localDirectoryPath], { cwd: workspace });
+  await exec.exec('git', ['config', 'user.name', config.gitUserName], {
+    cwd: workspace,
+  });
+  await exec.exec('git', ['config', 'user.email', config.gitUserEmail], {
+    cwd: workspace,
+  });
+  await exec.exec('git', ['add', '--', config.localDirectoryPath], {
+    cwd: workspace,
+  });
 
   const staged = await exec.exec('git', ['diff', '--cached', '--quiet'], {
     cwd: workspace,
@@ -89,10 +107,14 @@ export async function commitPulledChanges(config: CommitPulledChangesConfig): Pr
     core.info(`${config.logPrefix}   - ${file}`);
   }
 
-  await exec.exec('git', ['commit', '-m', config.commitMessage], { cwd: workspace });
+  await exec.exec('git', ['commit', '-m', config.commitMessage], {
+    cwd: workspace,
+  });
 
   if (config.commitBranch) {
-    await exec.exec('git', ['push', 'origin', `HEAD:${config.commitBranch}`], { cwd: workspace });
+    await exec.exec('git', ['push', 'origin', `HEAD:${config.commitBranch}`], {
+      cwd: workspace,
+    });
   } else {
     await exec.exec('git', ['push'], { cwd: workspace });
   }
