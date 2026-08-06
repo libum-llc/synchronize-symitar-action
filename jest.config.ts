@@ -8,6 +8,7 @@ const config: Config = {
   testPathIgnorePatterns: ['/node_modules/', '/dist/'],
   moduleNameMapper: {
     '^@lib/(.*)$': '<rootDir>/src/lib/$1',
+    '^azure-pipelines-task-lib/task$': '<rootDir>/src/lib/task-shim.ts',
   },
   coverageDirectory: 'coverage',
   collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts'],
