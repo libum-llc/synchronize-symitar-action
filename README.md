@@ -17,6 +17,7 @@ GitHub Action to synchronize a directory on the Jack Henry™ credit union core 
   - [Using Mirror Mode](#using-mirror-mode)
   - [Preserving Server-Managed Files](#preserving-server-managed-files)
   - [Pulling Preserved Files Back to Git](#pulling-preserved-files-back-to-git)
+  - [Opening a Pull Request Instead of Committing](#opening-a-pull-request-instead-of-committing)
   - [Drift Detection](#drift-detection)
   - [Release Pipeline with Environment Approvals](#release-pipeline-with-environment-approvals)
 - [List Inputs](#list-inputs)
@@ -212,18 +213,56 @@ jobs:
 
 When `commit-branch` is set, `actions/checkout` must check out the same branch. Drive both values from the same input or variable so they cannot drift. The action fails if the checked-out branch and `commit-branch` do not match.
 
-For protected branches, set `commit-pulled-changes: false` and open a pull request in a later workflow step.
+### Opening a Pull Request Instead of Committing
+
+For protected branches, set `create-pull-request: true` instead of `commit-pulled-changes`. The action commits the pulled changes to `pull-request-branch`, force-pushes it with `--force-with-lease`, and opens a pull request into `pull-request-target-branch` — or reuses the pull request that is already open for that same head and base, so a scheduled workflow does not accumulate duplicates.
+
+`create-pull-request` and `commit-pulled-changes` are mutually exclusive, and both require `sync-mode: pull`. Neither does anything during a dry run.
 
 ```yaml
-- name: Open PR for pulled changes
-  uses: peter-evans/create-pull-request@v7
-  with:
-    base: main
-    branch: chore/symitar-pull
-    delete-branch: true
-    commit-message: 'chore: sync server-managed Symitar files'
-    title: 'chore: sync server-managed Symitar files'
+jobs:
+  pull-server-managed:
+    runs-on: self-hosted
+    permissions:
+      contents: write
+      # Required. The default GITHUB_TOKEN cannot open a pull request without
+      # it, and the run fails rather than silently skipping the pull request.
+      pull-requests: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # Required so the action can push the pull request branch.
+          fetch-depth: 0
+
+      - name: Pull server-managed PowerOns
+        uses: libum-llc/synchronize-symitar-action@v1
+        with:
+          directory-type: powerOns
+          symitar-hostname: 93.455.43.232
+          sym-number: 627
+          symitar-user-number: 1995
+          symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
+          ssh-username: libum
+          ssh-password: ${{ secrets.SSH_PASSWORD }}
+          api-key: ${{ secrets.API_KEY }}
+          sync-mode: pull
+          dry-run: false
+          preserve-server-files: |
+            - RD.*
+            - PFR.*
+          pull-preserved-only: true
+          create-pull-request: true
+          pull-request-branch: chore/symitar-pull
+          pull-request-target-branch: main
+          pull-request-title: 'chore: sync server-managed Symitar files'
+          pull-request-body: 'Auto-generated pull of server-managed Symitar files.'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
+
+`pull-request-branch` must differ from `pull-request-target-branch`. When a pull request is opened or reused, the run publishes `pull-request-id` and `pull-request-url`; when the pull produced nothing to commit, or the run was a dry run, neither output is published.
+
+If your organization requires pull requests to be opened by a real account (for example so that branch protection's "require review from someone other than the author" applies), pass a PAT with `pull-requests: write` as `github-token` instead of `secrets.GITHUB_TOKEN`.
 
 ### Drift Detection
 
@@ -366,6 +405,12 @@ preserve-server-files: |
 | `commit-branch`         | Branch to push the commit to. Defaults to the checked-out branch.                                                 | No       | `''`                                                 |
 | `git-user-name`         | Git author name used when `commit-pulled-changes` is enabled                                                      | No       | `libum-bot`                                          |
 | `git-user-email`        | Git author email used when `commit-pulled-changes` is enabled                                                     | No       | `bot@libum.io`                                       |
+| `create-pull-request`   | When `sync-mode` is `pull`, commit to `pull-request-branch` and open (or reuse) a pull request instead of pushing to `commit-branch`. Requires `github-token`. Mutually exclusive with `commit-pulled-changes`. | No       | `false`                                              |
+| `pull-request-branch`   | Head branch the pulled changes are committed to. Force-pushed with `--force-with-lease`. Must differ from `pull-request-target-branch`.                            | No       | `chore/symitar-pull`                                 |
+| `pull-request-target-branch` | Base branch the pull request targets                                                                         | No       | `commit-branch`, then the checked-out branch         |
+| `pull-request-title`    | Title of the pull request opened when `create-pull-request` is enabled                                            | No       | `chore: sync server-managed Symitar files`           |
+| `pull-request-body`     | Body of the pull request opened when `create-pull-request` is enabled                                             | No       | `Auto-generated pull of server-managed Symitar files.` |
+| `github-token`          | Token used to open the pull request. Needs `pull-requests: write`. Required whenever `create-pull-request` is `true`; the run fails before contacting Symitar if it is missing. | No       | `''`                                                 |
 | `debug`                 | Enable debug logging for Symitar clients                                                                          | No       | `false`                                              |
 
 ### Outputs
@@ -378,6 +423,8 @@ preserve-server-files: |
 | `files-uninstalled` | Number of PowerOn files uninstalled                                        |
 | `outliers-count`    | Number of server files that differ from local but are not preserve-matched |
 | `outlier-files`     | JSON array of outlier file names                                           |
+| `pull-request-id`   | Number of the pull request opened or reused by `create-pull-request`       |
+| `pull-request-url`  | Web URL of the pull request opened or reused by `create-pull-request`      |
 
 ### Secrets
 
@@ -386,6 +433,8 @@ The following secrets should be configured in your repository:
 - `SYMITAR_USER_PASSWORD` - Your Symitar Quest password
 - `SSH_PASSWORD` - The AIX password for the Symitar host
 - `API_KEY` - Your PowerOn Pipelines API Key from [Libum Portal](https://portal.libum.io)
+
+`create-pull-request` additionally needs a `github-token`. `secrets.GITHUB_TOKEN` works provided the job grants `permissions: pull-requests: write`; a PAT is only needed when the pull request must be attributed to a real account.
 
 ## Contributing
 

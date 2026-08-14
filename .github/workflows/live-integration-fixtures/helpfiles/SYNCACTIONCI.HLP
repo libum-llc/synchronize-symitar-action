@@ -1,0 +1,9 @@
+Synchronize Symitar Action - live integration fixture.
+
+This file exists only so the live-integration workflow has one known-present
+local HELPFILE to compare against SYM 627. Every scenario in that workflow runs
+with dry-run: true, so this file is never actually transferred to the Symitar
+host - the run only ever reports that it *would* be.
+
+Do not deploy this file to SYM 627 by hand. The workflow asserts
+files-deployed = 1, which holds precisely because the file is absent remotely.

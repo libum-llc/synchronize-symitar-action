@@ -1,0 +1,272 @@
+name: live-integration
+
+# Runs on pull requests and on manual dispatch.
+#
+# SECURITY: this repo is public and this workflow runs on a self-hosted runner
+# with network access to the Symitar host, so the `pull_request` trigger is only
+# safe because of the fork guard in the job's `if:` below —
+# `github.event.pull_request.head.repo.full_name == github.repository`. A
+# job-level `if:` is evaluated before a runner is assigned, so a pull request
+# from a fork is skipped without ever occupying the runner or reaching Symitar.
+# Only same-repo branches (i.e. commits a maintainer pushed) can execute here.
+#
+# Do not remove that condition, and do not switch to `pull_request_target` —
+# that trigger runs against the base repo's context with secrets available and
+# would defeat the guard entirely.
+#
+# Recommended defence in depth at the repo level: set Actions →
+# "Fork pull request workflows from outside collaborators" to
+# "Require approval for all outside collaborators".
+on:
+  pull_request:
+  workflow_dispatch:
+
+# Shared across every workflow in this repo that talks to a live Symitar host,
+# so two runs (this workflow re-triggered, or a future Symitar-touching
+# workflow) never race against the same Sym at once.
+#
+# KNOWN LIMITATION: GitHub Actions scopes concurrency groups per repository.
+# This group only serializes runs within synchronize-symitar-action - it cannot
+# and does not prevent a simultaneous validate-poweron-action or
+# poweron-pipelines live-integration run from also hitting SYM 627, even though
+# all three now target the same physical host. There is no workflow-level fix
+# (an external cross-repo lock would add more failure modes than it removes).
+# The operator must ensure the `Symitar` runner group's actual runner(s) are
+# shared/serialized across all three repos - e.g. by pointing them at the same
+# physical self-hosted runner, so the runner itself queues jobs one at a time.
+# Confirm this at runner-group setup time, not by editing this file.
+concurrency:
+  group: symitar-live-integration
+  cancel-in-progress: false
+
+# CONFIGURATION SPLIT: the three real credentials (API key, AIX password,
+# Symitar user password) are org secrets and are redacted from these logs.
+# The host-identifying values below are hardcoded literals, matching how
+# poweron-pipelines does it in src/integration/live/config.ts
+# (LIVE_SYMITAR_DEFAULTS) and how validate-poweron-action's live-integration.yml
+# does it — kept identical across all three repos so the live-integration setup
+# reads the same way in each.
+#
+# Note this repo is public, so those literals are visible in source and in
+# git history. That is an accepted trade for infrastructure identifiers that
+# sit behind a firewall. Never put anything credential-shaped here —
+# passwords, API keys and tokens belong in org secrets, which are redacted.
+#
+# READ-ONLY BY CONSTRUCTION: every step below passes `dry-run: 'true'`. Core's
+# `executeSynchronizationTransaction` skips snapshot capture, mutation and
+# verification entirely on a dry run, so these scenarios compare the workspace
+# against SYM 627 and report what *would* change without writing anything to
+# the host. Mutating coverage (install/uninstall, rollback, mirror deletion)
+# lives in poweron-pipelines' own live suite, which owns run-scoped fixtures
+# and recovery scripts; reproducing it in a public repo's pull-request workflow
+# would put unattended writes to a live credit-union core behind a
+# maintainer's branch push. Do not flip `dry-run` here.
+
+jobs:
+  synchronize-symitar:
+    name: SynchronizeSymitar Live Integration
+    # Load-bearing, not defence in depth: the `pull_request` trigger above is
+    # only safe because of the fork check on the last line. Dependabot is also
+    # excluded — it has no reason to touch a live Sym.
+    if: >-
+      github.actor != 'dependabot[bot]' &&
+      !startsWith(github.ref_name, 'dependabot/') &&
+      (github.event_name != 'pull_request' ||
+      (github.event.pull_request.user.login != 'dependabot[bot]' &&
+      !startsWith(github.event.pull_request.head.ref, 'dependabot/') &&
+      github.event.pull_request.head.repo.full_name == github.repository))
+    environment: symitar-integration
+    runs-on:
+      group: Symitar
+      labels: self-hosted
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          # Required. Core's git helpers resolve refs relative to the checkout,
+          # and `commit-pulled-changes` / `create-pull-request` runs push a
+          # branch from it. actions/checkout defaults to a depth-1 clone with
+          # no other refs fetched, which makes those operations fail with
+          # "ambiguous argument". This is the same fetch-depth requirement the
+          # README documents for consumers.
+          fetch-depth: 0
+
+      # No pnpm/node/build steps here on purpose. The whole point of this
+      # workflow is to exercise the action exactly as a consumer would:
+      # action.yml's input plumbing and the dist/index.js bundle already
+      # committed to this ref, not a freshly recompiled copy. `pnpm build`
+      # producing a different bundle than what's committed is covered by
+      # ci.yml's "Check dist" step, not here.
+
+      - name: Prepare no-op fixture directory
+        # A truly empty, uncommitted directory (not even a .gitkeep) so the
+        # Symitar client's local file listing returns zero entries. Git can't
+        # track an empty directory, and a .gitkeep file would itself show up
+        # as a locally-present, remotely-absent file and break the no-op
+        # assertion below.
+        run: mkdir -p "${GITHUB_WORKSPACE}/live-integration-noop-scratch"
+
+      - name: 'HTTPS: dry-run push of a known-absent HELPFILE'
+        id: https-push
+        uses: ./
+        with:
+          directory-type: helpFiles
+          local-directory-path: .github/workflows/live-integration-fixtures/helpfiles/
+          sync-mode: push
+          dry-run: 'true'
+          connection-type: https
+          symitar-hostname: '74.200.48.18'
+          symitar-app-port: '42627'
+          sym-number: '627'
+          symitar-user-number: '1999'
+          symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
+          ssh-username: 'libum627'
+          ssh-password: ${{ secrets.SYMITAR_PASSWORD }}
+          api-key: ${{ secrets.POWERON_PIPELINES_API_KEY }}
+          sync-method: sftp
+
+      - name: 'Assert: HTTPS dry-run push outputs'
+        run: |
+          deployed="${{ steps.https-push.outputs.files-deployed }}"
+          deleted="${{ steps.https-push.outputs.files-deleted }}"
+          outliers="${{ steps.https-push.outputs.outliers-count }}"
+          echo "files-deployed=$deployed files-deleted=$deleted outliers-count=$outliers"
+          # 1, not 0: SYNCACTIONCI.HLP exists in the workspace and never on the
+          # host, because every scenario here is a dry run. An empty value means
+          # the outputs never reached $GITHUB_OUTPUT at all — the exact silent
+          # failure that using exportVariable in the TaskHost would produce.
+          if [ "$deployed" != "1" ]; then
+            echo "::error::HTTPS dry-run push expected files-deployed=1, got '$deployed'"
+            exit 1
+          fi
+          # push never deletes; only mirror does.
+          if [ "$deleted" != "0" ]; then
+            echo "::error::HTTPS dry-run push expected files-deleted=0, got '$deleted'"
+            exit 1
+          fi
+
+      - name: 'SSH: dry-run push of a known-absent HELPFILE'
+        id: ssh-push
+        uses: ./
+        with:
+          directory-type: helpFiles
+          local-directory-path: .github/workflows/live-integration-fixtures/helpfiles/
+          sync-mode: push
+          dry-run: 'true'
+          connection-type: ssh
+          symitar-hostname: '74.200.48.18'
+          sym-number: '627'
+          symitar-user-number: '1999'
+          symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
+          ssh-username: 'libum627'
+          ssh-password: ${{ secrets.SYMITAR_PASSWORD }}
+          api-key: ${{ secrets.POWERON_PIPELINES_API_KEY }}
+          sync-method: sftp
+          # The only step that runs with debug enabled. This is a public repo
+          # with world-readable Actions logs, and debug-level Symitar output is
+          # far broader than these assertions need. Keeping it on exactly one
+          # step exercises the debug code path once per run without flooding
+          # every step.
+          debug: 'true'
+
+      - name: 'Assert: SSH dry-run push outputs'
+        run: |
+          deployed="${{ steps.ssh-push.outputs.files-deployed }}"
+          deleted="${{ steps.ssh-push.outputs.files-deleted }}"
+          echo "files-deployed=$deployed files-deleted=$deleted"
+          if [ "$deployed" != "1" ] || [ "$deleted" != "0" ]; then
+            echo "::error::SSH dry-run push produced unexpected outputs (expected 1/0)"
+            exit 1
+          fi
+
+      - name: 'HTTPS: no-op (empty local directory)'
+        id: https-noop
+        uses: ./
+        with:
+          directory-type: helpFiles
+          local-directory-path: live-integration-noop-scratch/
+          sync-mode: push
+          dry-run: 'true'
+          connection-type: https
+          symitar-hostname: '74.200.48.18'
+          symitar-app-port: '42627'
+          sym-number: '627'
+          symitar-user-number: '1999'
+          symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
+          ssh-username: 'libum627'
+          ssh-password: ${{ secrets.SYMITAR_PASSWORD }}
+          api-key: ${{ secrets.POWERON_PIPELINES_API_KEY }}
+          sync-method: sftp
+
+      - name: 'Assert: no-op outputs'
+        run: |
+          deployed="${{ steps.https-noop.outputs.files-deployed }}"
+          deleted="${{ steps.https-noop.outputs.files-deleted }}"
+          installed="${{ steps.https-noop.outputs.files-installed }}"
+          uninstalled="${{ steps.https-noop.outputs.files-uninstalled }}"
+          outliers="${{ steps.https-noop.outputs.outliers-count }}"
+          files="${{ steps.https-noop.outputs.outlier-files }}"
+          echo "deployed=$deployed deleted=$deleted installed=$installed uninstalled=$uninstalled outliers=$outliers outlier-files=$files"
+          # All six of core's non-pull-request outputs are checked here, because
+          # this is the one scenario whose expected value is known exactly for
+          # every one of them. A published-but-empty output fails this.
+          if [ "$deployed" != "0" ] || [ "$deleted" != "0" ] || [ "$installed" != "0" ] || [ "$uninstalled" != "0" ] || [ "$outliers" != "0" ]; then
+            echo "::error::no-op run produced unexpected counts (expected 0/0/0/0/0)"
+            exit 1
+          fi
+          if [ "$files" != "[]" ]; then
+            echo "::error::no-op run expected outlier-files=[], got '$files'"
+            exit 1
+          fi
+
+      - name: 'Invalid input fails before contacting Symitar'
+        id: invalid-input
+        continue-on-error: true
+        uses: ./
+        with:
+          directory-type: helpFiles
+          local-directory-path: live-integration-noop-scratch/
+          # Rejected by loadSynchronizeConfig, which runs before the API key
+          # check and before any client is constructed.
+          sync-mode: sideways
+          dry-run: 'true'
+          connection-type: https
+          symitar-hostname: '74.200.48.18'
+          symitar-app-port: '42627'
+          sym-number: '627'
+          symitar-user-number: '1999'
+          symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
+          ssh-username: 'libum627'
+          ssh-password: ${{ secrets.SYMITAR_PASSWORD }}
+          api-key: ${{ secrets.POWERON_PIPELINES_API_KEY }}
+          sync-method: sftp
+
+      - name: 'Assert: invalid input failed the step'
+        run: |
+          outcome="${{ steps.invalid-input.outcome }}"
+          echo "outcome=$outcome"
+          if [ "$outcome" != "failure" ]; then
+            echo "::error::an invalid sync-mode was expected to fail the step but outcome was '$outcome'"
+            exit 1
+          fi
+
+      - name: Write Integration Summary
+        if: always()
+        run: |
+          cat <<'MARKDOWN' >> "$GITHUB_STEP_SUMMARY"
+          ## SynchronizeSymitar Live Integration
+
+          **Target:** SYM 627, `HELPFILES`<br>
+          **Mutation:** none — every scenario runs with `dry-run: true`<br>
+          **Action ref:** `uses: ./` (action.yml + the committed dist/ bundle on this checkout)
+
+          | Scenario | Connection | Mode | Coverage |
+          | --- | --- | --- | --- |
+          | Known-absent HELPFILE | HTTPS | push (dry run) | `files-deployed`/`files-deleted` = 1/0 |
+          | Known-absent HELPFILE | SSH + debug | push (dry run) | `files-deployed`/`files-deleted` = 1/0 |
+          | Empty local directory | HTTPS | push (dry run) | all six counts 0, `outlier-files` = `[]` |
+          | Invalid `sync-mode` | HTTPS | — | Step fails before Symitar is contacted |
+          MARKDOWN

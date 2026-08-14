@@ -1,29 +1,44 @@
+import * as childProcess from 'child_process';
+import { tmpdir } from 'os';
+
 import { SymitarHTTPs, SymitarSSH } from '@libum-llc/symitar';
+
+import {
+  InputError,
+  SymNumberError,
+  validateApiKey,
+} from '@libum-llc/pipelines-core';
 
 import {
   createHTTPsClient,
   createSSHClient,
-  getSyncTransport,
   loadSynchronizeConfig,
   validateTaskApiKey,
-  DEFAULT_SYNC_COMPARE_MODE,
-  type SyncMethod,
-  type SynchronizeTaskConfig,
+  type SynchronizeActionConfig,
 } from '../task-orchestration';
-import { InputError, SymNumberError } from '../errors';
-import { validateApiKey } from '../subscription';
 
-// Mock dependencies
+// Both mocks spread `requireActual` on purpose. `@libum-llc/pipelines-core`
+// owns the error hierarchy these assertions dispatch on, and it imports
+// `@libum-llc/symitar` itself for the sync-mode enums - so a bare factory mock
+// would replace the very classes under test and make the suite vacuous rather
+// than failing.
 jest.mock('@libum-llc/symitar', () => ({
+  ...jest.requireActual('@libum-llc/symitar'),
   SymitarHTTPs: jest.fn(),
   SymitarSSH: jest
     .fn()
     .mockImplementation(() => ({ isReady: Promise.resolve() })),
-  SymitarSyncMode: { MIRROR: 'mirror', PUSH: 'push', PULL: 'pull' },
-  SymitarSyncTransport: { SFTP: 'sftp', RSYNC: 'rsync' },
 }));
-jest.mock('../subscription', () => ({
+jest.mock('@libum-llc/pipelines-core', () => ({
+  ...jest.requireActual('@libum-llc/pipelines-core'),
   validateApiKey: jest.fn().mockResolvedValue(undefined),
+}));
+// Only `execFileSync`, which the commit-branch guard shells out through.
+// `jest.spyOn` cannot be used here: Node marks `child_process`'s exports
+// non-configurable, so redefining one throws.
+jest.mock('child_process', () => ({
+  ...jest.requireActual('child_process'),
+  execFileSync: jest.fn(),
 }));
 
 const symitarSSHMock = SymitarSSH as unknown as jest.Mock;
@@ -69,6 +84,7 @@ describe('task-orchestration', () => {
     process.env.GITHUB_REF = 'refs/heads/feature/test';
     process.env.GITHUB_REF_NAME = 'feature/test';
     process.env.GITHUB_WORKSPACE = WORKSPACE;
+    delete process.env.RUNNER_TEMP;
     setActionInputs(BASE_INPUTS);
 
     // Suppress the repo config banner during tests
@@ -81,6 +97,7 @@ describe('task-orchestration', () => {
     delete process.env.GITHUB_REF;
     delete process.env.GITHUB_REF_NAME;
     delete process.env.GITHUB_WORKSPACE;
+    delete process.env.RUNNER_TEMP;
   });
 
   describe('loadSynchronizeConfig', () => {
@@ -115,7 +132,7 @@ describe('task-orchestration', () => {
       );
       expect(config.gitUserName).toBe('libum-bot');
       expect(config.gitUserEmail).toBe('bot@libum.io');
-      expect(config.azureDevOpsAccessToken).toBeUndefined();
+      expect(config.githubToken).toBeUndefined();
     });
 
     it('should trim the api-key input', () => {
@@ -136,12 +153,12 @@ describe('task-orchestration', () => {
     // separately from the source checkout; on GitHub the checkout is the thing
     // being synchronized.
     describe('workspace paths', () => {
-      it('should resolve all artifact paths from GITHUB_WORKSPACE', () => {
+      it('should resolve all source paths from GITHUB_WORKSPACE', () => {
         const config = loadSynchronizeConfig();
 
-        expect(config.artifactPath).toBe(WORKSPACE);
-        expect(config.artifactAbsolutePath).toBe(WORKSPACE);
-        expect(config.repositoryPath).toBe(WORKSPACE);
+        expect(config.sourcePath).toBe(WORKSPACE);
+        expect(config.sourceAbsolutePath).toBe(WORKSPACE);
+        expect(config.workspacePath).toBe(WORKSPACE);
       });
 
       it('should fall back to the process cwd when GITHUB_WORKSPACE is unset', () => {
@@ -149,15 +166,33 @@ describe('task-orchestration', () => {
 
         const config = loadSynchronizeConfig();
 
-        expect(config.artifactAbsolutePath).toBe(process.cwd());
-        expect(config.repositoryPath).toBe(process.cwd());
+        expect(config.sourceAbsolutePath).toBe(process.cwd());
+        expect(config.workspacePath).toBe(process.cwd());
       });
 
-      // The runner builds `${basePath}/${localDirectoryPath}`
+      // Core builds `${basePath}/${localDirectoryPath}`
       it('should strip a trailing separator from the workspace path', () => {
         process.env.GITHUB_WORKSPACE = `${WORKSPACE}/`;
 
-        expect(loadSynchronizeConfig().artifactAbsolutePath).toBe(WORKSPACE);
+        expect(loadSynchronizeConfig().sourceAbsolutePath).toBe(WORKSPACE);
+      });
+    });
+
+    // Core never reads host environment variables, so the runner's scratch
+    // location (it mkdtemps a transaction root there) is resolved here.
+    describe('tempDirectory', () => {
+      it('should use RUNNER_TEMP when the runner provides it', () => {
+        process.env.RUNNER_TEMP = '/home/runner/work/_temp';
+
+        expect(loadSynchronizeConfig().tempDirectory).toBe(
+          '/home/runner/work/_temp',
+        );
+      });
+
+      it('should fall back to the OS temp directory', () => {
+        delete process.env.RUNNER_TEMP;
+
+        expect(loadSynchronizeConfig().tempDirectory).toBe(tmpdir());
       });
     });
 
@@ -226,9 +261,9 @@ describe('task-orchestration', () => {
         });
       });
 
-      // Vendored code concatenates `${directory}${name}` with no separator, so
-      // the trailing slash the Azure extension guarantees through its zod
-      // config schema has to be restored on the input instead.
+      // The trailing slash the Azure extension guarantees through its zod
+      // config schema has to be restored on the input instead: core validates
+      // nothing about the shape of a directory path.
       it.each([
         ['no trailing slash', 'REPWRITERSPECS', 'REPWRITERSPECS/'],
         ['one trailing slash', 'REPWRITERSPECS/', 'REPWRITERSPECS/'],
@@ -399,30 +434,58 @@ describe('task-orchestration', () => {
         ]);
       });
 
-      // v2 breaking change: parsing is comma-only, matching pipelines
+      const parsedList = (inputName: string): string[] => {
+        const config = loadSynchronizeConfig();
+        return {
+          'install-poweron-list': config.repoConfig.installPowerOns,
+          'validate-ignore-list': config.repoConfig.validateIgnorePowerOns,
+          'preserve-server-files': config.preserveServerFiles,
+        }[inputName]!;
+      };
+
+      // Not comma-only. `action.yml` inputs are plain strings, the README has
+      // documented the multi-line and YAML block-sequence forms since v1, and
+      // narrowing this would silently collapse
+      // `preserve-server-files: |\n  - RD.*\n  - PFR.*` into one pattern that
+      // matches nothing - every preserved server file would start being
+      // overwritten on the next push.
       it.each([
         ['install-poweron-list'],
         ['validate-ignore-list'],
         ['preserve-server-files'],
-      ])('should NOT split a newline-delimited %s value', (inputName) => {
+      ])('should split a newline-delimited %s value', (inputName) => {
         setActionInputs({ [inputName]: 'ONE.PO\nTWO.PO' });
 
-        const config = loadSynchronizeConfig();
-        const parsed = {
-          'install-poweron-list': config.repoConfig.installPowerOns,
-          'validate-ignore-list': config.repoConfig.validateIgnorePowerOns,
-          'preserve-server-files': config.preserveServerFiles,
-        }[inputName];
-
-        expect(parsed).toEqual(['ONE.PO\nTWO.PO']);
+        expect(parsedList(inputName)).toEqual(['ONE.PO', 'TWO.PO']);
       });
 
-      it('should NOT strip a leading "- " YAML list marker', () => {
+      it.each([
+        ['install-poweron-list'],
+        ['validate-ignore-list'],
+        ['preserve-server-files'],
+      ])('should parse a YAML block sequence in %s', (inputName) => {
+        setActionInputs({ [inputName]: '- ONE.PO\n- TWO.PO\n' });
+
+        expect(parsedList(inputName)).toEqual(['ONE.PO', 'TWO.PO']);
+      });
+
+      it('should strip a leading "- " YAML list marker', () => {
         setActionInputs({ 'install-poweron-list': '- ONE.PO, - TWO.PO' });
 
         expect(loadSynchronizeConfig().repoConfig.installPowerOns).toEqual([
-          '- ONE.PO',
-          '- TWO.PO',
+          'ONE.PO',
+          'TWO.PO',
+        ]);
+      });
+
+      // The exact README example. Left as an explicit case because it is the
+      // one that silently broke: a single unmatched pattern rather than two.
+      it('should parse the preserve-server-files example from the README', () => {
+        setActionInputs({ 'preserve-server-files': '- RD.*\n- PFR.*\n' });
+
+        expect(loadSynchronizeConfig().preserveServerFiles).toEqual([
+          'RD.*',
+          'PFR.*',
         ]);
       });
 
@@ -486,10 +549,10 @@ describe('task-orchestration', () => {
     });
 
     // `action.yml` cannot express the two-option `pickList` that constrains
-    // this input in the Azure extension's `task.json`, and the vendored runner
-    // casts it straight to `'https' | 'ssh'` then branches
-    // `if (=== 'https') ... else SSH`. Without this validation a typo runs the
-    // SSH path silently against an HTTPS-configured job.
+    // this input in the Azure extension's `task.json`, and core's runner treats
+    // it as `'https' | 'ssh'`, branching `=== 'https' ? HTTPS : SSH`. Without
+    // this validation a typo runs the SSH path silently against an
+    // HTTPS-configured job.
     describe('connectionType', () => {
       it('should accept an unset input (action.yml defaults it to ssh)', () => {
         expect(() => loadSynchronizeConfig()).not.toThrow();
@@ -518,7 +581,7 @@ describe('task-orchestration', () => {
         );
       });
 
-      // The runner calls SSH-only APIs in both branches
+      // Core's runner calls SSH-only APIs in both branches
       it('should require the ssh credentials even for an https connection', () => {
         setActionInputs({ 'connection-type': 'https' });
         delete process.env['INPUT_SSH-PASSWORD'];
@@ -627,9 +690,93 @@ describe('task-orchestration', () => {
       });
     });
 
-    // Pull request creation is wired separately; the config carries the
-    // pipelines-shaped placeholders so the vendored runner compiles
-    describe('pull request placeholders', () => {
+    // Core's `commitPulledChanges` runs `git push origin HEAD:<commitBranch>`
+    // without ever comparing HEAD to commitBranch - on Azure the two cannot
+    // diverge. On GitHub `actions/checkout` takes an arbitrary `ref`, so a
+    // workflow that checks out `develop` and sets `commit-branch: main` would
+    // silently move `main` to `develop`'s tree. The pre-v2 `git.ts` guarded
+    // this and the README still documents the requirement.
+    describe('commit-branch / checkout guard', () => {
+      const liveCommitInputs = {
+        'sync-mode': 'pull',
+        'commit-pulled-changes': 'true',
+        'dry-run': 'false',
+      };
+
+      const execFileSyncMock = childProcess.execFileSync as jest.Mock;
+
+      const withHeadBranch = (branch: string): jest.Mock => {
+        execFileSyncMock.mockReturnValue(`${branch}\n`);
+        return execFileSyncMock;
+      };
+
+      it('should accept a checkout that matches commit-branch', () => {
+        const execFileSync = withHeadBranch('main');
+        setActionInputs({ ...liveCommitInputs, 'commit-branch': 'main' });
+
+        expect(() => loadSynchronizeConfig()).not.toThrow();
+        expect(execFileSync).toHaveBeenCalledWith(
+          'git',
+          ['rev-parse', '--abbrev-ref', 'HEAD'],
+          { cwd: WORKSPACE, encoding: 'utf8' },
+        );
+      });
+
+      it('should throw InputError when the checkout is a different branch', () => {
+        withHeadBranch('develop');
+        setActionInputs({ ...liveCommitInputs, 'commit-branch': 'main' });
+
+        expect(() => loadSynchronizeConfig()).toThrow(InputError);
+        expect(() => loadSynchronizeConfig()).toThrow(
+          /commit-branch is "main" but the checked-out branch is "develop"/,
+        );
+      });
+
+      it('should throw InputError on a detached HEAD', () => {
+        withHeadBranch('HEAD');
+        setActionInputs({ ...liveCommitInputs, 'commit-branch': 'main' });
+
+        expect(() => loadSynchronizeConfig()).toThrow(/detached HEAD/);
+      });
+
+      it('should not run git on a dry run', () => {
+        const execFileSync = withHeadBranch('develop');
+        setActionInputs({
+          ...liveCommitInputs,
+          'dry-run': 'true',
+          'commit-branch': 'main',
+        });
+
+        expect(() => loadSynchronizeConfig()).not.toThrow();
+        expect(execFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should not run git when commit-pulled-changes is off', () => {
+        const execFileSync = withHeadBranch('develop');
+        setActionInputs({ 'commit-branch': 'main' });
+
+        expect(() => loadSynchronizeConfig()).not.toThrow();
+        expect(execFileSync).not.toHaveBeenCalled();
+      });
+
+      // create-pull-request checks out pullRequestBranch itself with
+      // `git checkout -B`, so HEAD is correct by construction.
+      it('should not run git for a create-pull-request run', () => {
+        const execFileSync = withHeadBranch('develop');
+        setActionInputs({
+          'sync-mode': 'pull',
+          'dry-run': 'false',
+          'create-pull-request': 'true',
+          'github-token': 'ghp-test-token',
+          'commit-branch': 'main',
+        });
+
+        expect(() => loadSynchronizeConfig()).not.toThrow();
+        expect(execFileSync).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('pull request inputs', () => {
       it('should default the pull request fields', () => {
         const config = loadSynchronizeConfig();
 
@@ -678,6 +825,86 @@ describe('task-orchestration', () => {
 
         expect(() => loadSynchronizeConfig()).toThrow(/cannot both be enabled/);
       });
+
+      it('should read create-pull-request on a pull', () => {
+        setActionInputs({
+          'sync-mode': 'pull',
+          'create-pull-request': 'true',
+          'github-token': 'ghp-test-token',
+        });
+
+        expect(loadSynchronizeConfig().createPullRequest).toBe(true);
+      });
+
+      it.each([['push'], ['mirror']])(
+        'should throw InputError when create-pull-request is used with %s',
+        (syncMode) => {
+          setActionInputs({
+            'sync-mode': syncMode,
+            'create-pull-request': 'true',
+            'github-token': 'ghp-test-token',
+          });
+
+          expect(() => loadSynchronizeConfig()).toThrow(InputError);
+          expect(() => loadSynchronizeConfig()).toThrow(
+            /can only be used when syncMode is pull/,
+          );
+        },
+      );
+    });
+
+    // Core throws `InputError` when `createPullRequest` is on but no
+    // `PullRequestPublisher` is supplied; the publisher is always supplied
+    // here, so the failure that has to be made loud instead is a publisher
+    // that has no usable credential. Refusing at load time means it happens
+    // before the API key check and before Symitar is contacted at all - not
+    // after a pull has already rewritten the workspace.
+    describe('githubToken', () => {
+      const pullRequestInputs = {
+        'sync-mode': 'pull',
+        'create-pull-request': 'true',
+      };
+
+      it('should read the github-token input', () => {
+        setActionInputs({ ...pullRequestInputs, 'github-token': ' ghp-abc ' });
+
+        expect(loadSynchronizeConfig().githubToken).toBe('ghp-abc');
+      });
+
+      it('should be undefined when the input is unset', () => {
+        expect(loadSynchronizeConfig().githubToken).toBeUndefined();
+      });
+
+      it('should throw InputError when create-pull-request has no token', () => {
+        setActionInputs(pullRequestInputs);
+
+        expect(() => loadSynchronizeConfig()).toThrow(InputError);
+        expect(() => loadSynchronizeConfig()).toThrow(
+          /'github-token' input is required/,
+        );
+      });
+
+      it('should throw InputError for a whitespace-only token', () => {
+        setActionInputs({ ...pullRequestInputs, 'github-token': '   ' });
+
+        expect(() => loadSynchronizeConfig()).toThrow(InputError);
+      });
+
+      // The runner does not export GITHUB_TOKEN into an action's environment,
+      // so a fallback would only ever resolve to undefined and turn a loud
+      // failure into a confusing one.
+      it('should not fall back to the GITHUB_TOKEN environment variable', () => {
+        process.env.GITHUB_TOKEN = 'ghp-from-env';
+        setActionInputs(pullRequestInputs);
+
+        expect(() => loadSynchronizeConfig()).toThrow(InputError);
+
+        delete process.env.GITHUB_TOKEN;
+      });
+
+      it('should not require a token when create-pull-request is off', () => {
+        expect(() => loadSynchronizeConfig()).not.toThrow();
+      });
     });
 
     describe('branch refs', () => {
@@ -698,26 +925,6 @@ describe('task-orchestration', () => {
         expect(config.buildBranch).toBe('');
         expect(config.buildBranchName).toBe('');
       });
-    });
-  });
-
-  describe('DEFAULT_SYNC_COMPARE_MODE', () => {
-    it('should be quick', () => {
-      expect(DEFAULT_SYNC_COMPARE_MODE).toBe('quick');
-    });
-  });
-
-  describe('getSyncTransport', () => {
-    it('should map sftp to the SFTP transport', () => {
-      expect(getSyncTransport('sftp')).toBe('sftp');
-    });
-
-    it('should map rsync to the RSYNC transport', () => {
-      expect(getSyncTransport('rsync')).toBe('rsync');
-    });
-
-    it('should throw InputError for an unknown method', () => {
-      expect(() => getSyncTransport('ftp' as SyncMethod)).toThrow(InputError);
     });
   });
 
@@ -749,7 +956,7 @@ describe('task-orchestration', () => {
   });
 
   describe('createHTTPsClient', () => {
-    const loadHTTPsConfig = (): SynchronizeTaskConfig => {
+    const loadHTTPsConfig = (): SynchronizeActionConfig => {
       setActionInputs({
         'connection-type': 'https',
         'symitar-app-port': '42627',
@@ -766,10 +973,10 @@ describe('task-orchestration', () => {
       );
     });
 
-    // The runner (SynchronizeDirectory/run.ts) always builds the SSH client
-    // first and hands it to the HTTPS client, because it goes on to call
-    // SSH-only APIs (getFileModificationTime, createInstallWorker,
-    // createUninstallWorker) on that same instance.
+    // Core's runner always builds the SSH client first and hands it to the
+    // HTTPS client, because it goes on to call SSH-only APIs
+    // (getFileModificationTime, createInstallWorker, createUninstallWorker) on
+    // that same instance.
     it('should attach the SSH client the runner constructs', async () => {
       const config = loadHTTPsConfig();
 

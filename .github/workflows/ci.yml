@@ -74,3 +74,96 @@ jobs:
             exit 1
           fi
           echo "dist/ matches a fresh build of src/"
+      -
+        # The task runner now lives in `@libum-llc/pipelines-core`, a private
+        # GitHub Packages dependency. `action.yml` ships only `dist/index.js` -
+        # consumers never run `pnpm install`, and they have no credentials for
+        # our registry - so the package MUST be inlined by ncc rather than left
+        # as a runtime `require`. A leftover `require("@libum-llc/...")` would
+        # throw MODULE_NOT_FOUND on every consumer while still passing every
+        # test here. Assert the bundle is non-vacuous (it really contains core's
+        # runner) and that neither private package survives as a bare require.
+        name: Assert the core package was inlined into the bundle
+        run: |
+          # The marker must be a string that ONLY core's SynchronizeDirectory
+          # runner can contribute. It is one arm of core's `describePhase`
+          # switch, so it exists nowhere else - not in this repo's sources, and
+          # crucially not in any *comment* here either. That distinction is the
+          # whole point: ncc copies source comments into the bundle verbatim, so
+          # validate-poweron-action's first sentinel (a success message that
+          # also appeared in a comment in its own main.ts) passed even on a
+          # bundle built with core externalized.
+          #
+          # Verified locally: this marker occurs once in the real bundle and
+          # zero times in one built with
+          # `ncc build src/main.ts --external @libum-llc/pipelines-core`.
+          if [ "$(grep -c 'establishing a connection to Symitar' dist/index.js)" -eq 0 ]; then
+            echo "Error: dist/index.js does not contain core's task runner - this check would be vacuous"
+            exit 1
+          fi
+          for pkg in @libum-llc/pipelines-core @libum-llc/symitar; do
+            if [ "$(grep -c "require(\"$pkg\")" dist/index.js)" -ne 0 ]; then
+              echo "Error: dist/index.js still requires $pkg at runtime"
+              echo "ncc did not inline it; consumers of this action cannot resolve it"
+              exit 1
+            fi
+          done
+          node -e "require('./dist/index.js')"
+          echo "Core is inlined; bundle contains the task runner"
+      -
+        # main.ts only self-executes under `if (require.main === module)`,
+        # which relies on ncc rewriting that check to
+        # `require.main === require.cache[eval('__filename')]`. If a future ncc
+        # version changes that rewrite, the bundle silently becomes a no-op that
+        # exits 0 without synchronizing anything - a green, fast, wrong build.
+        # Run the bundle exactly the way the action runtime does (as the process
+        # entry point, not via `require()` from another script) and assert that
+        # the startup banner reaches stdout, that core's own runner really
+        # executed inside the bundle, and that it fails loudly given bogus
+        # credentials.
+        #
+        # The `[ValidateSubscription]` assertion is the strong one: that prefix
+        # is emitted by core's subscription module at run time, so it can only
+        # appear if core's inlined code actually ran - a grep for a string in
+        # the bundle could not tell that apart from dead bytes.
+        #
+        # This makes one real network call to the Libum license server with an
+        # invalid API key, which is acceptable once per build. The Symitar host
+        # input is pointed at 192.0.2.1 (TEST-NET-1, RFC 5737) so nothing here
+        # ever addresses a real Symitar host, and `dry-run` is true so no
+        # mutation could occur even if it did.
+        name: Smoke test the bundle as the actual action entry point
+        run: |
+          set +e
+          output=$(env \
+            INPUT_DIRECTORY-TYPE=powerOns \
+            INPUT_SYNC-MODE=push \
+            INPUT_DRY-RUN=true \
+            INPUT_SYMITAR-HOSTNAME=192.0.2.1 \
+            INPUT_SYM-NUMBER=99 \
+            INPUT_SYMITAR-USER-NUMBER=9999 \
+            INPUT_SYMITAR-USER-PASSWORD=smoke-test-password \
+            INPUT_SSH-USERNAME=smoke-test-user \
+            INPUT_SSH-PASSWORD=smoke-test-password \
+            INPUT_API-KEY=sk-smoke-test-bogus-key \
+            INPUT_CONNECTION-TYPE=ssh \
+            INPUT_SYNC-METHOD=sftp \
+            GITHUB_WORKSPACE="$RUNNER_TEMP" \
+            GITHUB_REF=refs/heads/main \
+            node dist/index.js 2>&1)
+          exit_code=$?
+          echo "$output"
+          set -e
+          if ! echo "$output" | grep -q 'Starting Symitar synchronization'; then
+            echo "Error: startup banner never reached stdout - main.ts's require.main guard may be broken"
+            exit 1
+          fi
+          if ! echo "$output" | grep -q '\[ValidateSubscription\]'; then
+            echo "Error: core's runner never executed inside the bundle"
+            exit 1
+          fi
+          if [ "$exit_code" -eq 0 ]; then
+            echo "Error: smoke run exited 0 with bogus credentials - the action may be a silent no-op"
+            exit 1
+          fi
+          echo "Smoke run behaved correctly: banner printed, core ran, exited non-zero ($exit_code)"
