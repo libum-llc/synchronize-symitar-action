@@ -47,6 +47,16 @@ const TOKEN = 'ghp-test-token';
 const publish = (token: string | undefined) =>
   createGitHubPullRequestPublisher(token).openOrReuse(INPUT);
 
+/** Awaits a publish that must reject, and hands back the Error it rejected with. */
+const publishFailure = async (token: string | undefined): Promise<Error> => {
+  try {
+    await publish(token);
+  } catch (error) {
+    return error as Error;
+  }
+  throw new Error('expected openOrReuse to reject, but it resolved');
+};
+
 describe('createGitHubPullRequestPublisher', () => {
   const originalEnv = { ...process.env };
 
@@ -170,6 +180,28 @@ describe('createGitHubPullRequestPublisher', () => {
 
       await expect(publish(TOKEN)).rejects.toThrow(/already exists/);
     });
+
+    // The re-query is a second round trip and can fail on its own. If it were
+    // unwrapped, a raw Octokit error would propagate and the 422 - the only
+    // evidence of why `create` failed - would be discarded.
+    it('keeps the 422 in the message when the re-query itself fails', async () => {
+      mockCreate.mockRejectedValue(
+        apiError(422, 'A pull request already exists for libum-llc:chore.'),
+      );
+      mockList
+        .mockResolvedValueOnce({ data: [] })
+        .mockRejectedValueOnce(apiError(500, 'Internal Server Error'));
+
+      const failure = await publishFailure(TOKEN);
+
+      // Both halves are reported: what failed now, and what sent us here.
+      expect(failure.message).toMatch(/Listing open pull requests/);
+      expect(failure.message).toMatch(
+        /while recovering from: A pull request already exists/,
+      );
+      // And the 422 is attached, not just interpolated.
+      expect((failure.cause as Error).message).toMatch(/already exists/);
+    });
   });
 
   describe('failure reporting', () => {
@@ -190,8 +222,20 @@ describe('createGitHubPullRequestPublisher', () => {
       expect(mockList).not.toHaveBeenCalled();
     });
 
-    it('names the missing permission on a 403', async () => {
+    // The permission named has to match the call that failed. Listing pull
+    // requests needs only read, so telling the reader they need `write` after a
+    // failed list sends them after the wrong fix.
+    it('names read, not write, when the list call is forbidden', async () => {
       mockList.mockRejectedValue(apiError(403, 'Resource not accessible'));
+
+      const failure = await publishFailure(TOKEN);
+
+      expect(failure.message).toMatch(/pull-requests: read/);
+      expect(failure.message).not.toMatch(/pull-requests: write/);
+    });
+
+    it('names write when the create call is forbidden', async () => {
+      mockCreate.mockRejectedValue(apiError(403, 'Resource not accessible'));
 
       await expect(publish(TOKEN)).rejects.toThrow(/pull-requests: write/);
     });

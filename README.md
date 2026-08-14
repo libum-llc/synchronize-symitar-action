@@ -264,6 +264,13 @@ jobs:
 
 If your organization requires pull requests to be opened by a real account (for example so that branch protection's "require review from someone other than the author" applies), pass a PAT with `pull-requests: write` as `github-token` instead of `secrets.GITHUB_TOKEN`.
 
+> **Check out the target branch.** `pull-request-branch` is created from whatever
+> `actions/checkout` put in the workspace, and is never rebased onto
+> `pull-request-target-branch`. If the job checks out `develop` and targets
+> `main`, the pull request contains the pulled Symitar files *and* every commit
+> by which `develop` diverges from `main`. Check out the branch you are targeting
+> — or set `pull-request-target-branch` to the branch you checked out.
+
 ### Drift Detection
 
 When `sync-mode: pull` and `pull-preserved-only: true`, the action reports server files that differ from git but do not match `preserve-server-files`. These outliers are not pulled.
@@ -393,6 +400,7 @@ preserve-server-files: |
 | `connection-type`       | Connection type: `https` or `ssh`                                                                                 | No       | `ssh`                                                |
 | `local-directory-path`  | Local directory path containing files to synchronize                                                              | No       | Standard path for the selected directory type        |
 | `sync-mode`             | Synchronization mode: `push`, `pull`, or `mirror`                                                                 | Yes      | -                                                    |
+| `skip-validation`       | Skip PowerOn validation before a push or mirror. Only applies to `powerOns`. **Validation is not skipped by `dry-run`** — see the note below.                     | No       | `false`                                              |
 | `sync-method`           | Transport method: `sftp` or `rsync`                                                                               | No       | `sftp`                                               |
 | `sftp-concurrency`      | Number of concurrent SFTP transfers. Only applies when `sync-method` is `sftp`                                    | No       | `4`                                                  |
 | `dry-run`               | Shows proposed changes without applying them                                                                      | No       | `true`                                               |
@@ -402,7 +410,7 @@ preserve-server-files: |
 | `pull-preserved-only`   | When `sync-mode` is `pull`, only pull files matched by `preserve-server-files`                                    | No       | `false`                                              |
 | `commit-pulled-changes` | When `sync-mode` is `pull`, commit and push pulled workspace changes after synchronization                        | No       | `false`                                              |
 | `commit-message`        | Commit message used when `commit-pulled-changes` is enabled                                                       | No       | `chore: sync server-managed Symitar files [skip ci]` |
-| `commit-branch`         | Branch to push the commit to. Defaults to the checked-out branch.                                                 | No       | `''`                                                 |
+| `commit-branch`         | Branch to push the commit to. Leave unset to push the checked-out branch to its own upstream; when set, `actions/checkout` must have checked out that same branch. | No       | `''`                                                 |
 | `git-user-name`         | Git author name used when `commit-pulled-changes` is enabled                                                      | No       | `libum-bot`                                          |
 | `git-user-email`        | Git author email used when `commit-pulled-changes` is enabled                                                     | No       | `bot@libum.io`                                       |
 | `create-pull-request`   | When `sync-mode` is `pull`, commit to `pull-request-branch` and open (or reuse) a pull request instead of pushing to `commit-branch`. Requires `github-token`. Mutually exclusive with `commit-pulled-changes`. | No       | `false`                                              |
@@ -412,6 +420,20 @@ preserve-server-files: |
 | `pull-request-body`     | Body of the pull request opened when `create-pull-request` is enabled                                             | No       | `Auto-generated pull of server-managed Symitar files.` |
 | `github-token`          | Token used to open the pull request. Needs `pull-requests: write`. Required whenever `create-pull-request` is `true`; the run fails before contacting Symitar if it is missing. | No       | `''`                                                 |
 | `debug`                 | Enable debug logging for Symitar clients                                                                          | No       | `false`                                              |
+
+> **`dry-run: true` does not make a `powerOns` run read-only.**
+>
+> PowerOn validation runs *before* the dry-run short-circuit and is not gated by
+> it. On a `push` or `mirror` of `directory-type: powerOns`, each changed PowerOn
+> is uploaded into `REPWRITERSPECS` under a temporary name, compiled on the
+> Symitar host, and then removed — even when `dry-run` is `true`. If the run is
+> cancelled between the upload and the cleanup, the temporary file is left
+> behind.
+>
+> A `powerOns` run touches nothing on the host only when one of these holds:
+> `sync-mode: pull` (pull never validates), or `skip-validation: true`. Other
+> directory types (`letterFiles`, `dataFiles`, `helpFiles`) never validate, so
+> `dry-run: true` alone is sufficient for them.
 
 ### Outputs
 

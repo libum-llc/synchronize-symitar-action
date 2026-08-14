@@ -34,33 +34,71 @@ function resolveRepository(): { owner: string; repo: string } {
   return context.repo;
 }
 
+/** Which REST call failed, and therefore which permission it needed. */
+type ApiCall = 'list' | 'create';
+
+/**
+ * The permission a call actually requires.
+ *
+ * Naming `pull-requests: write` on a failed *list* would send the reader after
+ * the wrong fix: listing pull requests needs only read access, so a 403 there
+ * means the token cannot see the repository's pull requests at all, not that it
+ * is missing write.
+ */
+const REQUIRED_PERMISSION: Record<ApiCall, string> = {
+  list: 'pull-requests: read',
+  create: 'pull-requests: write',
+};
+
 /**
  * Turns an Octokit failure into a message that names the likely cause.
  *
  * The two failures worth distinguishing are both silent-looking from a
- * workflow author's point of view: a token with read-only `pull-requests`
- * scope (403), and a token that cannot see the repository at all (404).
+ * workflow author's point of view: a token without the permission the call
+ * needs (403), and a token that cannot see the repository at all (404).
+ *
+ * @param error The Octokit failure
+ * @param call Which REST call failed
+ * @param description Human-readable description of what was being attempted
+ * @param cause An earlier error this one displaced, preserved on the result
  */
-function describeApiError(error: unknown, action: string): Error {
+function describeApiError(
+  error: unknown,
+  call: ApiCall,
+  description: string,
+  cause?: unknown,
+): Error {
   const status = (error as { status?: number }).status;
   const message = error instanceof Error ? error.message : String(error);
+  const permission = REQUIRED_PERMISSION[call];
 
-  if (status === 403) {
-    return new Error(
-      `${action} was forbidden by the GitHub API (403): ${message}. ` +
-        'The github-token needs `pull-requests: write`; the default GITHUB_TOKEN ' +
-        'only has it when the job grants `permissions: pull-requests: write`.',
-    );
-  }
+  const detail =
+    status === 403
+      ? `${description} was forbidden by the GitHub API (403): ${message}. ` +
+        `The github-token needs \`${permission}\`; the default GITHUB_TOKEN ` +
+        `only has it when the job grants \`permissions: ${permission}\`.`
+      : status === 404
+        ? `${description} failed with 404: ${message}. The github-token cannot see ` +
+          `${context.repo.owner}/${context.repo.repo}, or lacks repository scope.`
+        : `${description} failed: ${message}`;
 
-  if (status === 404) {
-    return new Error(
-      `${action} failed with 404: ${message}. The github-token cannot see ` +
-        `${context.repo.owner}/${context.repo.repo}, or lacks repository scope.`,
-    );
-  }
+  // `cause` carries the 422 that sent us back to the list query. It is appended
+  // to the message as well as attached, because `core.setFailed` renders only
+  // the message - attaching it alone would discard the only evidence of why
+  // `create` failed and leave a bare list failure that reads as unrelated.
+  const causeMessage =
+    cause instanceof Error
+      ? cause.message
+      : cause === undefined
+        ? ''
+        : String(cause);
 
-  return new Error(`${action} failed: ${message}`);
+  return new Error(
+    causeMessage
+      ? `${detail} (while recovering from: ${causeMessage})`
+      : detail,
+    cause === undefined ? undefined : { cause },
+  );
 }
 
 /**
@@ -120,6 +158,9 @@ async function openOrReusePullRequest(
   const headBranch = trimBranchRef(input.head);
   const baseBranch = trimBranchRef(input.base);
 
+  const listDescription = `Listing open pull requests for ${headBranch} -> ${baseBranch}`;
+  const createDescription = `Creating a pull request for ${headBranch} -> ${baseBranch}`;
+
   let existing: GitHubPullRequest | undefined;
   try {
     existing = await findOpenPullRequest(
@@ -130,10 +171,7 @@ async function openOrReusePullRequest(
       baseBranch,
     );
   } catch (error) {
-    throw describeApiError(
-      error,
-      `Listing open pull requests for ${headBranch} -> ${baseBranch}`,
-    );
+    throw describeApiError(error, 'list', listDescription);
   }
 
   if (existing) {
@@ -153,25 +191,29 @@ async function openOrReusePullRequest(
     return { id: data.number, url: data.html_url, reused: false };
   } catch (error) {
     if (!isAlreadyExists(error)) {
-      throw describeApiError(
-        error,
-        `Creating a pull request for ${headBranch} -> ${baseBranch}`,
-      );
+      throw describeApiError(error, 'create', createDescription);
     }
 
-    const raced = await findOpenPullRequest(
-      octokit,
-      owner,
-      repo,
-      headBranch,
-      baseBranch,
-    );
+    // The re-query is wrapped for the same reason the first one is: if it
+    // fails, the raw Octokit error would propagate and the 422 - the only
+    // evidence of why `create` failed - would be lost. The 422 is carried
+    // through as the `cause` either way, so both the "re-query failed" and the
+    // "re-query found nothing" branches still report it.
+    let raced: GitHubPullRequest | undefined;
+    try {
+      raced = await findOpenPullRequest(
+        octokit,
+        owner,
+        repo,
+        headBranch,
+        baseBranch,
+      );
+    } catch (listError) {
+      throw describeApiError(listError, 'list', listDescription, error);
+    }
 
     if (!raced) {
-      throw describeApiError(
-        error,
-        `Creating a pull request for ${headBranch} -> ${baseBranch}`,
-      );
+      throw describeApiError(error, 'create', createDescription);
     }
 
     return { id: raced.number, url: raced.html_url, reused: true };

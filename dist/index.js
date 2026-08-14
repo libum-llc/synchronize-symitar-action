@@ -94883,25 +94883,53 @@ function resolveRepository() {
     return github_1.context.repo;
 }
 /**
+ * The permission a call actually requires.
+ *
+ * Naming `pull-requests: write` on a failed *list* would send the reader after
+ * the wrong fix: listing pull requests needs only read access, so a 403 there
+ * means the token cannot see the repository's pull requests at all, not that it
+ * is missing write.
+ */
+const REQUIRED_PERMISSION = {
+    list: 'pull-requests: read',
+    create: 'pull-requests: write',
+};
+/**
  * Turns an Octokit failure into a message that names the likely cause.
  *
  * The two failures worth distinguishing are both silent-looking from a
- * workflow author's point of view: a token with read-only `pull-requests`
- * scope (403), and a token that cannot see the repository at all (404).
+ * workflow author's point of view: a token without the permission the call
+ * needs (403), and a token that cannot see the repository at all (404).
+ *
+ * @param error The Octokit failure
+ * @param call Which REST call failed
+ * @param description Human-readable description of what was being attempted
+ * @param cause An earlier error this one displaced, preserved on the result
  */
-function describeApiError(error, action) {
+function describeApiError(error, call, description, cause) {
     const status = error.status;
     const message = error instanceof Error ? error.message : String(error);
-    if (status === 403) {
-        return new Error(`${action} was forbidden by the GitHub API (403): ${message}. ` +
-            'The github-token needs `pull-requests: write`; the default GITHUB_TOKEN ' +
-            'only has it when the job grants `permissions: pull-requests: write`.');
-    }
-    if (status === 404) {
-        return new Error(`${action} failed with 404: ${message}. The github-token cannot see ` +
-            `${github_1.context.repo.owner}/${github_1.context.repo.repo}, or lacks repository scope.`);
-    }
-    return new Error(`${action} failed: ${message}`);
+    const permission = REQUIRED_PERMISSION[call];
+    const detail = status === 403
+        ? `${description} was forbidden by the GitHub API (403): ${message}. ` +
+            `The github-token needs \`${permission}\`; the default GITHUB_TOKEN ` +
+            `only has it when the job grants \`permissions: ${permission}\`.`
+        : status === 404
+            ? `${description} failed with 404: ${message}. The github-token cannot see ` +
+                `${github_1.context.repo.owner}/${github_1.context.repo.repo}, or lacks repository scope.`
+            : `${description} failed: ${message}`;
+    // `cause` carries the 422 that sent us back to the list query. It is appended
+    // to the message as well as attached, because `core.setFailed` renders only
+    // the message - attaching it alone would discard the only evidence of why
+    // `create` failed and leave a bare list failure that reads as unrelated.
+    const causeMessage = cause instanceof Error
+        ? cause.message
+        : cause === undefined
+            ? ''
+            : String(cause);
+    return new Error(causeMessage
+        ? `${detail} (while recovering from: ${causeMessage})`
+        : detail, cause === undefined ? undefined : { cause });
 }
 /**
  * Whether a create failure is GitHub reporting that the pull request already
@@ -94942,12 +94970,14 @@ async function openOrReusePullRequest(input, token) {
     // names (with the owner prefix on `head`), so the prefix comes back off here.
     const headBranch = (0, pipelines_core_1.trimBranchRef)(input.head);
     const baseBranch = (0, pipelines_core_1.trimBranchRef)(input.base);
+    const listDescription = `Listing open pull requests for ${headBranch} -> ${baseBranch}`;
+    const createDescription = `Creating a pull request for ${headBranch} -> ${baseBranch}`;
     let existing;
     try {
         existing = await findOpenPullRequest(octokit, owner, repo, headBranch, baseBranch);
     }
     catch (error) {
-        throw describeApiError(error, `Listing open pull requests for ${headBranch} -> ${baseBranch}`);
+        throw describeApiError(error, 'list', listDescription);
     }
     if (existing) {
         return { id: existing.number, url: existing.html_url, reused: true };
@@ -94965,11 +94995,22 @@ async function openOrReusePullRequest(input, token) {
     }
     catch (error) {
         if (!isAlreadyExists(error)) {
-            throw describeApiError(error, `Creating a pull request for ${headBranch} -> ${baseBranch}`);
+            throw describeApiError(error, 'create', createDescription);
         }
-        const raced = await findOpenPullRequest(octokit, owner, repo, headBranch, baseBranch);
+        // The re-query is wrapped for the same reason the first one is: if it
+        // fails, the raw Octokit error would propagate and the 422 - the only
+        // evidence of why `create` failed - would be lost. The 422 is carried
+        // through as the `cause` either way, so both the "re-query failed" and the
+        // "re-query found nothing" branches still report it.
+        let raced;
+        try {
+            raced = await findOpenPullRequest(octokit, owner, repo, headBranch, baseBranch);
+        }
+        catch (listError) {
+            throw describeApiError(listError, 'list', listDescription, error);
+        }
         if (!raced) {
-            throw describeApiError(error, `Creating a pull request for ${headBranch} -> ${baseBranch}`);
+            throw describeApiError(error, 'create', createDescription);
         }
         return { id: raced.number, url: raced.html_url, reused: true };
     }
@@ -95101,20 +95142,15 @@ const HOSTNAME_PATTERN = /^[a-zA-Z0-9.-]+$/;
 const MIN_PORT = 1;
 const MAX_PORT = 65535;
 // The pipelines directory defaults, which the Azure DevOps extension reads
-// from `.poweron-pipelines/config.yml`
+// from `.poweron-pipelines/config.yml`. They are deliberately identical to
+// core's own `DIRECTORY_CONFIG[type].defaultPath` values, so this table only
+// has to exist because `RepoConfig` requires all four fields - it can never
+// disagree with the default core would have picked anyway.
 const DEFAULT_DIRECTORY_PATHS = {
     powerOnsDirectory: pipelines_core_1.DEFAULT_POWERON_DIRECTORY,
     letterFilesDirectory: 'LETTERSPECS/',
     dataFilesDirectory: 'DATAFILES/',
     helpFilesDirectory: 'HELPFILES/',
-};
-// Which `RepoConfig.inputs` field the `local-directory-path` input overrides,
-// keyed by the `directory-type` input
-const DIRECTORY_TYPE_CONFIG_KEYS = {
-    powerOns: 'powerOnsDirectory',
-    letterFiles: 'letterFilesDirectory',
-    dataFiles: 'dataFilesDirectory',
-    helpFiles: 'helpFilesDirectory',
 };
 /**
  * Validates a hostname format
@@ -95131,24 +95167,6 @@ function validatePort(port, inputName) {
     if (isNaN(port) || port < MIN_PORT || port > MAX_PORT) {
         throw new pipelines_core_1.InputError(`Invalid port: ${port}. Must be between ${MIN_PORT}-${MAX_PORT}.`, inputName, { value: port });
     }
-}
-/**
- * Normalizes a directory input to the canonical form core expects: forward
- * slashes and exactly one trailing slash.
- *
- * The Azure DevOps extension enforces this with a zod `directoryPathSchema`
- * ("must end with a forward slash") when it parses
- * `.poweron-pipelines/config.yml`. That schema stayed with the extension —
- * core's `RepoConfig.inputs` fields are plain `string`s and core validates
- * nothing about their shape, because loading config is a host concern. A
- * GitHub Action is configured through `action.yml` inputs and has no schema, so
- * the guarantee is restored here instead.
- *
- * @param value The raw directory input
- */
-function toDirectoryPath(value) {
-    const normalized = value.trim().replace(/\\/g, '/').replace(/\/+$/, '');
-    return normalized ? `${normalized}/` : '';
 }
 /**
  * Resolves the checked-out workspace root.
@@ -95198,18 +95216,25 @@ function parseListInput(value) {
  *
  * The Azure DevOps extension reads this from `.poweron-pipelines/config.yml`;
  * a GitHub Action is configured entirely through `action.yml` inputs, so the
- * same shape is assembled from those instead. Only the directory belonging to
- * the selected `directory-type` is overridable, through `local-directory-path`.
+ * same shape is assembled from those instead.
+ *
+ * `inputs` deliberately carries only the defaults. `local-directory-path` is
+ * **not** folded into it, because core's runner never consults this table when
+ * that input is set: `synchronize-directory.ts` passes
+ * `task.getInput('localDirectoryPath', false) || undefined` straight to
+ * `getLocalDirectoryPath`, which returns `inputPath` whenever it is non-empty
+ * and only falls back to `configPaths` otherwise. An override written here
+ * would therefore be unreachable, and normalizing it on the way in would
+ * promise a canonical form that core never actually receives.
+ *
+ * Core validates the raw input itself and fails loudly, throwing `ConfigError`
+ * for a backslash, a leading `/`, a drive letter, a `..` segment or a NUL; and
+ * it joins with an explicit `/` (`${syncBasePath}/${localDirectoryPath}`), so
+ * no trailing-slash normalization is needed for the value to be usable.
  */
 function buildRepoConfigFromInputs() {
-    const inputs = { ...DEFAULT_DIRECTORY_PATHS };
-    const localDirectoryPath = toDirectoryPath((0, utils_1.getInput)('localDirectoryPath', false));
-    const configKey = DIRECTORY_TYPE_CONFIG_KEYS[(0, utils_1.getInput)('directoryType', false)];
-    if (localDirectoryPath && configKey) {
-        inputs[configKey] = localDirectoryPath;
-    }
     return {
-        inputs,
+        inputs: { ...DEFAULT_DIRECTORY_PATHS },
         branchSymNumbers: {},
         installPowerOns: parseListInput((0, utils_1.getInput)('installPowerOns', false)),
         validateIgnorePowerOns: parseListInput((0, utils_1.getInput)('validateIgnorePowerOns', false)),
@@ -95288,9 +95313,15 @@ function loadCommonConfig() {
  * requirement, so the guard is restored here - at load time, before Symitar is
  * contacted and before anything has been pulled into the workspace.
  *
- * Not applied to `create-pull-request` runs: core checks out
- * `pullRequestBranch` itself with `git checkout -B` before committing, so HEAD
- * is whatever it needs to be by construction.
+ * Only reachable on a `commit-pulled-changes` run, and that is the whole story:
+ * `commitPulledChanges` and `createPullRequest` are rejected as mutually
+ * exclusive earlier in this function, so a `create-pull-request` run can never
+ * arrive here at all. It is *not* skipped because core's `git checkout -B` makes
+ * HEAD correct — core branches `pullRequestBranch` from whatever HEAD already
+ * is and never rebases it onto `pullRequestTargetBranch`, so a run that checked
+ * out `develop` and targets `main` opens a pull request carrying all of
+ * `develop`'s divergence. That is a documented sharp edge of
+ * `create-pull-request` (see README), not something this guard covers.
  *
  * @param commitBranch The resolved commit branch
  * @param workspacePath Absolute path to the git working tree
@@ -95373,11 +95404,26 @@ function loadSynchronizeConfig() {
     }
     const commitMessage = (0, utils_1.getInput)('commitMessage', false) ||
         'chore: sync server-managed Symitar files [skip ci]';
-    const commitBranch = (0, utils_1.getInput)('commitBranch', false) ||
+    // Left undefined when the input is unset, which is what both `action.yml` and
+    // the README mean by "defaults to the checked-out branch": core's
+    // `commitPulledChanges` runs a bare `git push` in that case, sending HEAD to
+    // its own upstream. Defaulting it to `GITHUB_REF_NAME` instead would be wrong
+    // in exactly the situation the value exists for - a `workflow_dispatch` from
+    // `main` that checks out `develop` would resolve `commit-branch` to `main`,
+    // and `assertCheckoutMatchesCommitBranch` would then fail a run that worked in
+    // v1, advising the user to check out `main`, which is the opposite of what
+    // they want. The Azure extension does default it to `BUILD_SOURCEBRANCHNAME`,
+    // but Azure has no equivalent of `actions/checkout`'s arbitrary `ref`.
+    const commitBranch = (0, utils_1.getInput)('commitBranch', false) || undefined;
+    // The pull-request target still needs a concrete branch: core's
+    // `getRequiredPrValue` throws when it is empty. `GITHUB_REF_NAME` is the
+    // fallback here rather than on `commitBranch` because a pull request must name
+    // a base, whereas a push can legitimately mean "wherever HEAD already tracks".
+    const pullRequestTargetBranch = (0, utils_1.getInput)('pullRequestTargetBranch', false) ||
+        commitBranch ||
         process.env.GITHUB_REF_NAME ||
         commonConfig.buildBranchName ||
         undefined;
-    const pullRequestTargetBranch = (0, utils_1.getInput)('pullRequestTargetBranch', false) || commitBranch || undefined;
     const pullRequestBranch = (0, utils_1.getInput)('pullRequestBranch', false) || 'chore/symitar-pull';
     const pullRequestTitle = (0, utils_1.getInput)('pullRequestTitle', false) ||
         'chore: sync server-managed Symitar files';
@@ -97781,7 +97827,7 @@ module.exports = {"version":"3.19.0"};
 /***/ ((module) => {
 
 "use strict";
-module.exports = /*#__PURE__*/JSON.parse('{"name":"synchronize-symitar-action","version":"1.3.6","packageManager":"pnpm@10.20.0","description":"GitHub Action to synchronize a directory on the Jack Henry™ credit union core platform","main":"src/main.ts","scripts":{"build":"ncc build src/main.ts -o dist --source-map --license licenses.txt && node -e \\"const fs=require(\'fs\'),path=require(\'path\'),dist=path.resolve(\'dist\');if(fs.existsSync(dist)){for(const entry of fs.readdirSync(dist)){if(entry.endsWith(\'.d.ts\')||entry.endsWith(\'.d.ts.map\')||entry===\'pagent.exe\')fs.rmSync(path.join(dist,entry),{force:true});}for(const entry of [\'build\',\'lib\',\'synchronize\'])fs.rmSync(path.join(dist,entry),{force:true,recursive:true});}\\"","test":"jest --coverage","lint":"eslint --cache --quiet && prettier --check \\"src/**/*.ts\\" \\"__tests__/**/*.ts\\"","lint:fix":"eslint --cache --quiet --fix && prettier --write \\"src/**/*.ts\\" \\"__tests__/**/*.ts\\"","all":"pnpm lint:fix && pnpm build && pnpm test"},"repository":{"type":"git","url":"git+https://github.com/libum-llc/synchronize-symitar-action.git"},"keywords":["poweron","jack henry","symitar","episys","rsync","synchronize","github-action"],"author":"Libum, LLC","license":"MIT","dependencies":{"@actions/core":"^1.10.1","@actions/github":"^6.0.0","@libum-llc/pipelines-core":"1.0.1","@libum-llc/symitar":"1.12.0"},"devDependencies":{"@eslint/eslintrc":"^3.3.5","@types/jest":"^30.0.0","@types/node":"^22.20.1","@typescript-eslint/eslint-plugin":"^8.63.0","@typescript-eslint/parser":"^8.63.0","@vercel/ncc":"^0.38.1","eslint":"^9.39.4","eslint-config-prettier":"^10.1.8","eslint-plugin-prettier":"^5.5.6","jest":"^30.4.2","prettier":"^3.9.5","ts-jest":"^29.4.11","ts-node":"^10.9.2","typescript":"^5.9.3"}}');
+module.exports = /*#__PURE__*/JSON.parse('{"name":"synchronize-symitar-action","version":"1.3.6","packageManager":"pnpm@10.20.0","description":"GitHub Action to synchronize a directory on the Jack Henry™ credit union core platform","main":"src/main.ts","scripts":{"build":"ncc build src/main.ts -o dist --source-map --license licenses.txt && node -e \\"const fs=require(\'fs\'),path=require(\'path\'),dist=path.resolve(\'dist\');if(fs.existsSync(dist)){for(const entry of fs.readdirSync(dist)){if(entry.endsWith(\'.d.ts\')||entry.endsWith(\'.d.ts.map\')||entry===\'pagent.exe\')fs.rmSync(path.join(dist,entry),{force:true});}for(const entry of [\'build\',\'lib\',\'synchronize\'])fs.rmSync(path.join(dist,entry),{force:true,recursive:true});}\\"","test":"jest --coverage","lint":"eslint --cache --quiet && prettier --check \\"src/**/*.ts\\" \\"__tests__/**/*.ts\\"","lint:fix":"eslint --cache --quiet --fix && prettier --write \\"src/**/*.ts\\" \\"__tests__/**/*.ts\\"","all":"pnpm lint:fix && pnpm build && pnpm test"},"repository":{"type":"git","url":"git+https://github.com/libum-llc/synchronize-symitar-action.git"},"keywords":["poweron","jack henry","symitar","episys","rsync","synchronize","github-action"],"author":"Libum, LLC","license":"MIT","dependencies":{"@actions/core":"^1.10.1","@actions/github":"^6.0.0","@libum-llc/pipelines-core":"1.0.1","@libum-llc/symitar":"1.12.0"},"devDependencies":{"@eslint/eslintrc":"^3.3.5","@types/jest":"^30.0.0","@types/js-yaml":"^4.0.9","@types/node":"^22.20.1","@typescript-eslint/eslint-plugin":"^8.63.0","@typescript-eslint/parser":"^8.63.0","@vercel/ncc":"^0.38.1","eslint":"^9.39.4","eslint-config-prettier":"^10.1.8","eslint-plugin-prettier":"^5.5.6","jest":"^30.4.2","js-yaml":"^4.3.1","prettier":"^3.9.5","ts-jest":"^29.4.11","ts-node":"^10.9.2","typescript":"^5.9.3"}}');
 
 /***/ })
 

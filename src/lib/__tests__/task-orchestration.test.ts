@@ -4,10 +4,15 @@ import { tmpdir } from 'os';
 import { SymitarHTTPs, SymitarSSH } from '@libum-llc/symitar';
 
 import {
+  ConfigError,
+  getDirectoryConfig,
+  getLocalDirectoryPath,
   InputError,
   SymNumberError,
   validateApiKey,
 } from '@libum-llc/pipelines-core';
+
+import { createGitHubTaskHost } from '../github-task-host';
 
 import {
   createHTTPsClient,
@@ -214,74 +219,78 @@ describe('task-orchestration', () => {
         });
       });
 
+      // `local-directory-path` is deliberately NOT folded into repoConfig.
+      // Core's runner passes the raw input to `getLocalDirectoryPath`, which
+      // prefers it over `configPaths` whenever it is non-empty - so anything
+      // written here would be unreachable, and normalizing it on the way in
+      // would promise a canonical form core never receives.
       it.each([
-        ['powerOns', 'powerOnsDirectory'],
-        ['letterFiles', 'letterFilesDirectory'],
-        ['dataFiles', 'dataFilesDirectory'],
-        ['helpFiles', 'helpFilesDirectory'],
-      ] as const)(
-        'should apply local-directory-path to the %s directory field',
-        (directoryType, configKey) => {
+        ['powerOns'],
+        ['letterFiles'],
+        ['dataFiles'],
+        ['helpFiles'],
+        ['nonsense'],
+      ])(
+        'should keep the directory defaults untouched for directory-type %s',
+        (directoryType) => {
           setActionInputs({
             'directory-type': directoryType,
             'local-directory-path': 'CUSTOM/',
           });
 
-          expect(loadSynchronizeConfig().repoConfig.inputs[configKey]).toBe(
-            'CUSTOM/',
-          );
+          expect(loadSynchronizeConfig().repoConfig.inputs).toEqual({
+            powerOnsDirectory: 'REPWRITERSPECS/',
+            letterFilesDirectory: 'LETTERSPECS/',
+            dataFilesDirectory: 'DATAFILES/',
+            helpFilesDirectory: 'HELPFILES/',
+          });
         },
       );
 
-      it('should leave the other directory fields at their defaults', () => {
-        setActionInputs({
-          'directory-type': 'letterFiles',
-          'local-directory-path': 'CUSTOM/',
-        });
+      // These are exactly core's `DIRECTORY_CONFIG[type].defaultPath` values.
+      // The table only exists because RepoConfig requires all four fields; if it
+      // ever disagreed with core, the fallback path would change meaning.
+      it('should match the defaults core would have chosen on its own', () => {
+        const { inputs } = loadSynchronizeConfig().repoConfig;
 
-        expect(loadSynchronizeConfig().repoConfig.inputs).toEqual({
-          powerOnsDirectory: 'REPWRITERSPECS/',
-          letterFilesDirectory: 'CUSTOM/',
-          dataFilesDirectory: 'DATAFILES/',
-          helpFilesDirectory: 'HELPFILES/',
-        });
+        expect([
+          inputs.powerOnsDirectory,
+          inputs.letterFilesDirectory,
+          inputs.dataFilesDirectory,
+          inputs.helpFilesDirectory,
+        ]).toEqual([
+          getDirectoryConfig('powerOns').defaultPath,
+          getDirectoryConfig('letterFiles').defaultPath,
+          getDirectoryConfig('dataFiles').defaultPath,
+          getDirectoryConfig('helpFiles').defaultPath,
+        ]);
       });
 
-      it('should ignore local-directory-path for an unknown directory-type', () => {
-        setActionInputs({
-          'directory-type': 'nonsense',
-          'local-directory-path': 'CUSTOM/',
-        });
-
-        expect(loadSynchronizeConfig().repoConfig.inputs).toEqual({
-          powerOnsDirectory: 'REPWRITERSPECS/',
-          letterFilesDirectory: 'LETTERSPECS/',
-          dataFilesDirectory: 'DATAFILES/',
-          helpFilesDirectory: 'HELPFILES/',
-        });
-      });
-
-      // The trailing slash the Azure extension guarantees through its zod
-      // config schema has to be restored on the input instead: core validates
-      // nothing about the shape of a directory path.
+      // The raw input has to survive the TaskHost unchanged, because that is
+      // the value core actually uses. Core rejects a backslash, an absolute
+      // path or a `..` segment itself with a ConfigError, so this boundary
+      // neither needs nor may quietly rewrite it.
       it.each([
-        ['no trailing slash', 'REPWRITERSPECS', 'REPWRITERSPECS/'],
-        ['one trailing slash', 'REPWRITERSPECS/', 'REPWRITERSPECS/'],
-        ['repeated trailing slashes', 'REPWRITERSPECS//', 'REPWRITERSPECS/'],
-        ['a multi-segment path', 'SPECS/PO', 'SPECS/PO/'],
-        ['a backslash-separated path', 'SPECS\\PO', 'SPECS/PO/'],
-        ['surrounding whitespace', '  SPECS/PO  ', 'SPECS/PO/'],
-      ])(
-        'should normalize a local-directory-path with %s to exactly one trailing slash',
-        (_description, input, expected) => {
-          setActionInputs({ 'local-directory-path': input });
+        ['no trailing slash', 'REPWRITERSPECS'],
+        ['one trailing slash', 'REPWRITERSPECS/'],
+        ['a multi-segment path', 'SPECS/PO'],
+      ])('should hand core the %s input verbatim', (_description, input) => {
+        setActionInputs({ 'local-directory-path': input });
 
-          const config = loadSynchronizeConfig();
+        expect(createGitHubTaskHost().getInput('localDirectoryPath')).toBe(
+          input,
+        );
+      });
 
-          expect(config.repoConfig.inputs.powerOnsDirectory).toBe(expected);
-          expect(config.powerOnsDirectory).toBe(expected);
-        },
-      );
+      it.each([
+        ['a backslash-separated path', 'SPECS\\PO'],
+        ['an absolute path', '/etc'],
+        ['a parent-directory escape', '../outside'],
+      ])('should let core reject %s with a ConfigError', (_d, input) => {
+        expect(() => getLocalDirectoryPath('powerOns', input)).toThrow(
+          ConfigError,
+        );
+      });
     });
 
     it('should use the default SSH port when ssh-port is not provided', () => {
@@ -672,21 +681,37 @@ describe('task-orchestration', () => {
         expect(config.gitUserEmail).toBe('someone@example.com');
       });
 
-      it('should default commitBranch to the checked-out branch', () => {
-        expect(loadSynchronizeConfig().commitBranch).toBe('feature/test');
+      // "Defaults to the checked-out branch", per action.yml and the README,
+      // means leaving it undefined so core runs a bare `git push` and HEAD goes
+      // to its own upstream. Resolving it to GITHUB_REF_NAME instead would name
+      // the branch the *workflow* ran from, which is not the branch
+      // actions/checkout necessarily put in the workspace.
+      it('should leave commitBranch undefined when the input is unset', () => {
+        expect(loadSynchronizeConfig().commitBranch).toBeUndefined();
       });
 
-      it('should fall back to the build branch name when GITHUB_REF_NAME is unset', () => {
-        delete process.env.GITHUB_REF_NAME;
-
-        expect(loadSynchronizeConfig().commitBranch).toBe('feature/test');
-      });
-
-      it('should leave commitBranch undefined when no branch is resolvable', () => {
-        delete process.env.GITHUB_REF_NAME;
-        delete process.env.GITHUB_REF;
+      it('should not resolve commitBranch from GITHUB_REF_NAME', () => {
+        process.env.GITHUB_REF_NAME = 'main';
 
         expect(loadSynchronizeConfig().commitBranch).toBeUndefined();
+      });
+
+      // Regression: a workflow_dispatch from `main` that checks out `develop`
+      // and enables commit-pulled-changes worked in v1 (bare push, develop ->
+      // develop). Defaulting commitBranch to GITHUB_REF_NAME turned it into a
+      // hard failure whose advice - "check out main" - was the opposite of what
+      // the user wanted.
+      it('should not make a checkout that differs from GITHUB_REF_NAME fail', () => {
+        (childProcess.execFileSync as jest.Mock).mockReturnValue('develop\n');
+        process.env.GITHUB_REF_NAME = 'main';
+        setActionInputs({
+          'sync-mode': 'pull',
+          'commit-pulled-changes': 'true',
+          'dry-run': 'false',
+        });
+
+        expect(() => loadSynchronizeConfig()).not.toThrow();
+        expect(childProcess.execFileSync).not.toHaveBeenCalled();
       });
     });
 
@@ -789,6 +814,24 @@ describe('task-orchestration', () => {
         expect(config.pullRequestDescription).toBe(
           'Auto-generated pull of server-managed Symitar files.',
         );
+      });
+
+      // Unlike commitBranch, this one must resolve to something concrete: core's
+      // `getRequiredPrValue` throws on an empty target, and a pull request has
+      // to name a base branch.
+      it('should fall back to GITHUB_REF_NAME for the target branch', () => {
+        process.env.GITHUB_REF_NAME = 'release/1.0';
+
+        expect(loadSynchronizeConfig().pullRequestTargetBranch).toBe(
+          'release/1.0',
+        );
+      });
+
+      it('should prefer commit-branch over GITHUB_REF_NAME for the target branch', () => {
+        process.env.GITHUB_REF_NAME = 'release/1.0';
+        setActionInputs({ 'commit-branch': 'main' });
+
+        expect(loadSynchronizeConfig().pullRequestTargetBranch).toBe('main');
       });
 
       it('should read the pull request inputs', () => {

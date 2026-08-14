@@ -23,21 +23,15 @@ const MIN_PORT = 1;
 const MAX_PORT = 65535;
 
 // The pipelines directory defaults, which the Azure DevOps extension reads
-// from `.poweron-pipelines/config.yml`
+// from `.poweron-pipelines/config.yml`. They are deliberately identical to
+// core's own `DIRECTORY_CONFIG[type].defaultPath` values, so this table only
+// has to exist because `RepoConfig` requires all four fields - it can never
+// disagree with the default core would have picked anyway.
 const DEFAULT_DIRECTORY_PATHS: RepoConfig['inputs'] = {
   powerOnsDirectory: DEFAULT_POWERON_DIRECTORY,
   letterFilesDirectory: 'LETTERSPECS/',
   dataFilesDirectory: 'DATAFILES/',
   helpFilesDirectory: 'HELPFILES/',
-};
-
-// Which `RepoConfig.inputs` field the `local-directory-path` input overrides,
-// keyed by the `directory-type` input
-const DIRECTORY_TYPE_CONFIG_KEYS: Record<string, keyof RepoConfig['inputs']> = {
-  powerOns: 'powerOnsDirectory',
-  letterFiles: 'letterFilesDirectory',
-  dataFiles: 'dataFilesDirectory',
-  helpFiles: 'helpFilesDirectory',
 };
 
 /**
@@ -78,26 +72,6 @@ function validatePort(port: number, inputName: string): void {
       { value: port },
     );
   }
-}
-
-/**
- * Normalizes a directory input to the canonical form core expects: forward
- * slashes and exactly one trailing slash.
- *
- * The Azure DevOps extension enforces this with a zod `directoryPathSchema`
- * ("must end with a forward slash") when it parses
- * `.poweron-pipelines/config.yml`. That schema stayed with the extension —
- * core's `RepoConfig.inputs` fields are plain `string`s and core validates
- * nothing about their shape, because loading config is a host concern. A
- * GitHub Action is configured through `action.yml` inputs and has no schema, so
- * the guarantee is restored here instead.
- *
- * @param value The raw directory input
- */
-function toDirectoryPath(value: string): string {
-  const normalized = value.trim().replace(/\\/g, '/').replace(/\/+$/, '');
-
-  return normalized ? `${normalized}/` : '';
 }
 
 /**
@@ -151,23 +125,25 @@ function parseListInput(value: string): string[] {
  *
  * The Azure DevOps extension reads this from `.poweron-pipelines/config.yml`;
  * a GitHub Action is configured entirely through `action.yml` inputs, so the
- * same shape is assembled from those instead. Only the directory belonging to
- * the selected `directory-type` is overridable, through `local-directory-path`.
+ * same shape is assembled from those instead.
+ *
+ * `inputs` deliberately carries only the defaults. `local-directory-path` is
+ * **not** folded into it, because core's runner never consults this table when
+ * that input is set: `synchronize-directory.ts` passes
+ * `task.getInput('localDirectoryPath', false) || undefined` straight to
+ * `getLocalDirectoryPath`, which returns `inputPath` whenever it is non-empty
+ * and only falls back to `configPaths` otherwise. An override written here
+ * would therefore be unreachable, and normalizing it on the way in would
+ * promise a canonical form that core never actually receives.
+ *
+ * Core validates the raw input itself and fails loudly, throwing `ConfigError`
+ * for a backslash, a leading `/`, a drive letter, a `..` segment or a NUL; and
+ * it joins with an explicit `/` (`${syncBasePath}/${localDirectoryPath}`), so
+ * no trailing-slash normalization is needed for the value to be usable.
  */
 function buildRepoConfigFromInputs(): RepoConfig {
-  const inputs: RepoConfig['inputs'] = { ...DEFAULT_DIRECTORY_PATHS };
-  const localDirectoryPath = toDirectoryPath(
-    getInput('localDirectoryPath', false),
-  );
-  const configKey =
-    DIRECTORY_TYPE_CONFIG_KEYS[getInput('directoryType', false)];
-
-  if (localDirectoryPath && configKey) {
-    inputs[configKey] = localDirectoryPath;
-  }
-
   return {
-    inputs,
+    inputs: { ...DEFAULT_DIRECTORY_PATHS },
     branchSymNumbers: {},
     installPowerOns: parseListInput(getInput('installPowerOns', false)),
     validateIgnorePowerOns: parseListInput(
@@ -272,9 +248,15 @@ function loadCommonConfig(): CommonTaskConfig {
  * requirement, so the guard is restored here - at load time, before Symitar is
  * contacted and before anything has been pulled into the workspace.
  *
- * Not applied to `create-pull-request` runs: core checks out
- * `pullRequestBranch` itself with `git checkout -B` before committing, so HEAD
- * is whatever it needs to be by construction.
+ * Only reachable on a `commit-pulled-changes` run, and that is the whole story:
+ * `commitPulledChanges` and `createPullRequest` are rejected as mutually
+ * exclusive earlier in this function, so a `create-pull-request` run can never
+ * arrive here at all. It is *not* skipped because core's `git checkout -B` makes
+ * HEAD correct — core branches `pullRequestBranch` from whatever HEAD already
+ * is and never rebases it onto `pullRequestTargetBranch`, so a run that checked
+ * out `develop` and targets `main` opens a pull request carrying all of
+ * `develop`'s divergence. That is a documented sharp edge of
+ * `create-pull-request` (see README), not something this guard covers.
  *
  * @param commitBranch The resolved commit branch
  * @param workspacePath Absolute path to the git working tree
@@ -404,13 +386,27 @@ export function loadSynchronizeConfig(): SynchronizeActionConfig {
   const commitMessage =
     getInput('commitMessage', false) ||
     'chore: sync server-managed Symitar files [skip ci]';
-  const commitBranch =
-    getInput('commitBranch', false) ||
+  // Left undefined when the input is unset, which is what both `action.yml` and
+  // the README mean by "defaults to the checked-out branch": core's
+  // `commitPulledChanges` runs a bare `git push` in that case, sending HEAD to
+  // its own upstream. Defaulting it to `GITHUB_REF_NAME` instead would be wrong
+  // in exactly the situation the value exists for - a `workflow_dispatch` from
+  // `main` that checks out `develop` would resolve `commit-branch` to `main`,
+  // and `assertCheckoutMatchesCommitBranch` would then fail a run that worked in
+  // v1, advising the user to check out `main`, which is the opposite of what
+  // they want. The Azure extension does default it to `BUILD_SOURCEBRANCHNAME`,
+  // but Azure has no equivalent of `actions/checkout`'s arbitrary `ref`.
+  const commitBranch = getInput('commitBranch', false) || undefined;
+  // The pull-request target still needs a concrete branch: core's
+  // `getRequiredPrValue` throws when it is empty. `GITHUB_REF_NAME` is the
+  // fallback here rather than on `commitBranch` because a pull request must name
+  // a base, whereas a push can legitimately mean "wherever HEAD already tracks".
+  const pullRequestTargetBranch =
+    getInput('pullRequestTargetBranch', false) ||
+    commitBranch ||
     process.env.GITHUB_REF_NAME ||
     commonConfig.buildBranchName ||
     undefined;
-  const pullRequestTargetBranch =
-    getInput('pullRequestTargetBranch', false) || commitBranch || undefined;
   const pullRequestBranch =
     getInput('pullRequestBranch', false) || 'chore/symitar-pull';
   const pullRequestTitle =

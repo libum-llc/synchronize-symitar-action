@@ -77,20 +77,19 @@ const INPUT_NAME_MAPPING: Array<[pipelinesName: string, actionName: string]> = [
   ['pullRequestTitle', 'pull-request-title'],
   ['pullRequestDescription', 'pull-request-body'],
   ['githubToken', 'github-token'],
+  ['skipValidation', 'skip-validation'],
 ];
 
 /**
  * Inputs `loadSynchronizeConfig` reads that `action.yml` deliberately does not
- * declare yet.
+ * declare.
  *
- * `skipValidation` maps core's `skip-validation` switch, which bypasses PowerOn
- * validation on a push. It is left undeclared - and therefore always `false` -
- * until the owner asks for it; declaring it is the whole change needed to turn
- * it on. This list exists so that "undeclared" stays a decision rather than an
- * oversight: the test below fails if one of these quietly appears in
- * `action.yml`.
+ * Empty, and the test below keeps it that way: every name the adapter reads is
+ * now declared. An undeclared input silently resolves to '' at run time *and*
+ * makes the runner warn "Unexpected input(s)" at any consumer that passes it,
+ * so a read with no declaration is a bug rather than a feature flag.
  */
-const PENDING_ACTION_INPUTS = ['skip-validation'];
+const PENDING_ACTION_INPUTS: string[] = [];
 
 describe('utils', () => {
   beforeEach(() => {
@@ -128,6 +127,14 @@ describe('utils', () => {
       PENDING_ACTION_INPUTS.forEach((actionName) => {
         expect(declared).not.toContain(actionName);
       });
+    });
+
+    // skip-validation is the lever that makes a powerOns scenario safe under
+    // dry-run: PowerOn validation ignores isDryRun entirely and writes to
+    // REPWRITERSPECS, and `!options.powerOn.skipValidation` is the only term in
+    // `shouldValidate` a consumer can control without changing sync mode.
+    it('should declare skip-validation, which loadSynchronizeConfig reads', () => {
+      expect(readDeclaredActionInputs()).toContain('skip-validation');
     });
 
     it.each([

@@ -121,6 +121,15 @@ Three things are easy to get wrong:
   The list and the create are two round trips; a concurrent run can open one in
   between.
 
+A fourth thing is worth knowing but is not fixable here: core's
+`commitPulledChanges` creates the head branch with `git checkout -B` from
+*whatever HEAD already is*, and never rebases it onto the target. A run that
+checked out `develop` and targets `main` therefore opens a pull request carrying
+all of `develop`'s divergence. That is a documented sharp edge of
+`create-pull-request`, not something the commit-branch guard covers — the guard
+is unreachable on those runs because `commitPulledChanges` and
+`createPullRequest` are rejected as mutually exclusive first.
+
 `createPullRequest` is enforced from two directions: `loadSynchronizeConfig`
 refuses the run when `github-token` is missing (before Symitar is contacted),
 and core throws `InputError` if the input is on and no publisher was supplied —
@@ -140,8 +149,20 @@ which therefore have to be restored here:
 - `commitPulledChanges` / `createPullRequest` are pull-mode only and mutually
   exclusive
 - `github-token` is required when `create-pull-request` is on
-- **`toDirectoryPath()`** — normalizes directory inputs to exactly one trailing
-  slash, which core does not guarantee
+- `commit-branch` is left **undefined** when unset, which is what "defaults to
+  the checked-out branch" means: core then runs a bare `git push`. Resolving it
+  to `GITHUB_REF_NAME` would name the branch the *workflow* ran from, not the
+  one `actions/checkout` put in the workspace, and would turn a working v1
+  config (dispatch from `main`, check out `develop`) into a hard failure whose
+  advice is backwards. `pull-request-target-branch` *does* fall back to
+  `GITHUB_REF_NAME`, because core's `getRequiredPrValue` throws on an empty base
+- `local-directory-path` is deliberately **not** normalized or folded into
+  `repoConfig.inputs`. Core's runner passes the raw input to
+  `getLocalDirectoryPath`, which prefers it over `configPaths` whenever it is
+  non-empty, so anything written there is unreachable. Core validates the raw
+  value itself (`ConfigError` on a backslash, a leading `/`, a drive letter, a
+  `..` segment or a NUL) and joins with an explicit `/`, so no trailing-slash
+  normalization is needed or possible at this boundary.
 - **`parseListInput()`** — splits on commas *and* newlines and strips a leading
   `- `. Deliberately more permissive than the Azure extension's comma-only
   parser, because `action.yml` inputs are plain strings and the README has
@@ -215,10 +236,52 @@ relaxed:
 - **The fork guard** in the job's `if:`. This is a public repo; a job-level
   `if:` is evaluated before a runner is assigned, so a fork's pull request never
   reaches the runner. Never switch the trigger to `pull_request_target`.
-- **Every scenario is `dry-run: true`.** Core skips snapshot, mutation and
-  verification entirely on a dry run, so the workflow is read-only against the
-  live host. Mutating coverage belongs in `poweron-pipelines`' own live suite,
-  which owns run-scoped fixtures and recovery scripts.
+- **Every scenario pairs `dry-run: true` with a non-PowerOn `directory-type`.**
+  Both halves are required, and the second is the one that is easy to lose.
+
+#### `dry-run: true` does NOT make a `powerOns` run read-only
+
+This is the single most important thing to know before editing that workflow.
+**PowerOn validation is not dry-run gated.** In `@libum-llc/symitar@1.12.0`,
+`dist/shared/sync-orchestrator.js:169-171`:
+
+```js
+shouldValidate = hasPowerOnOptions
+              && syncMode !== SymitarSyncMode.PULL
+              && !options.powerOn?.skipValidation;
+```
+
+There is no `isDryRun` term, and the block runs at line 195 — *before*
+`operations.executeSync` at line 215, which is where the dry-run short-circuit
+actually lives (`clients/ssh/ssh.synchronize.js:10`,
+`clients/https/https.synchronize.js:13`; both clients share this orchestrator).
+Validation writes to the host: `clients/ssh/ssh.validate.js` sftp-writes each
+changed PowerOn into REPWRITERSPECS under a temporary name with mode 0770,
+chmods and chgrps it, compiles it, then unlinks it — so a run that dies between
+the write and the unlink leaves a temp file on a live Sym.
+
+`hasPowerOnOptions` is `options.powerOn && remoteDirectory === REPWRITERSPECS`.
+Core always sets `options.powerOn`, so the **directory type is the only
+discriminator**, and every current scenario uses `helpFiles` → `HELPFILES`.
+
+To add a `powerOns` scenario, one of these must hold: `sync-mode: pull`
+(validation is skipped for PULL), `skip-validation: 'true'`, or an explicit,
+reviewed decision to accept host writes from a pull-request-triggered workflow.
+`src/lib/__tests__/live-integration-workflow.test.ts` enforces exactly that
+disjunction in CI, so this cannot regress silently.
+
+Two related traps in reading that workflow's assertions:
+
+- `outliers-count`, `files-installed` and `files-uninstalled` are **structurally
+  zero** under dry run — outliers are populated only inside the SFTP transport,
+  which dry-run short-circuits before reaching, and install/uninstall are gated
+  on `!isDryRun`. Asserting `0` there proves the output plumbing works, not that
+  no drift exists.
+- `sync-method: rsync` is never exercised live, because `executeSyncTransport`
+  returns a synthetic result before choosing a transport.
+
+Mutating coverage belongs in `poweron-pipelines`' own live suite, which owns
+run-scoped fixtures and recovery scripts.
 
 ### Registry auth
 

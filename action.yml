@@ -112,6 +112,14 @@ inputs:
     description: 'Token used to open the pull request when create-pull-request is enabled. Needs `pull-requests: write` - the default GITHUB_TOKEN only has it when the job grants that permission. Required whenever create-pull-request is true; the run fails before contacting Symitar if it is missing.'
     required: false
     default: ''
+  skip-validation:
+    description: >-
+      Skip PowerOn validation before a push or mirror. Only applies to the powerOns directory type; pull never validates.
+      Note that validation is NOT skipped by dry-run: it uploads each changed PowerOn to REPWRITERSPECS under a temporary
+      name, compiles it on the host and removes it again, so a dry-run push of powerOns still writes to the Symitar host.
+      Set this to true when you need a push or mirror of powerOns that touches nothing on the host.
+    required: false
+    default: 'false'
   sync-method:
     description: 'The transport method for file synchronization: sftp (default) or rsync'
     required: false
