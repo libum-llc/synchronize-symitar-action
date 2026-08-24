@@ -4,12 +4,10 @@ import * as path from 'path';
 
 import { getOctokit } from '@actions/github';
 
+import { validateApiKey } from '@libum-llc/pipelines-core';
+
 import { createSynchronizeDependencies } from './dependencies';
-import {
-  createHTTPsClient,
-  createSSHClient,
-  validateTaskApiKey,
-} from '../lib/task-orchestration';
+import { createHTTPsClient, createSSHClient } from '../lib/task-orchestration';
 
 const mockList = jest.fn();
 const mockCreate = jest.fn();
@@ -86,7 +84,7 @@ describe('createSynchronizeDependencies', () => {
 
     expect(dependencies.task).toBeDefined();
     expect(dependencies.loadConfig).toEqual(expect.any(Function));
-    expect(dependencies.validateApiKey).toBe(validateTaskApiKey);
+    expect(dependencies.validateApiKey).toBe(validateApiKey);
     expect(dependencies.createHttpsClient).toBe(createHTTPsClient);
     expect(dependencies.createSshClient).toBe(createSSHClient);
     expect(dependencies.pullRequestPublisher).toBeDefined();

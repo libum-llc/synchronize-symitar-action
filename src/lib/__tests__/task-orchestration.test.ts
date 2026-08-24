@@ -9,7 +9,6 @@ import {
   getLocalDirectoryPath,
   InputError,
   SymNumberError,
-  validateApiKey,
 } from '@libum-llc/pipelines-core';
 
 import { createGitHubTaskHost } from '../github-task-host';
@@ -18,25 +17,22 @@ import {
   createHTTPsClient,
   createSSHClient,
   loadSynchronizeConfig,
-  validateTaskApiKey,
   type SynchronizeActionConfig,
 } from '../task-orchestration';
 
-// Both mocks spread `requireActual` on purpose. `@libum-llc/pipelines-core`
-// owns the error hierarchy these assertions dispatch on, and it imports
-// `@libum-llc/symitar` itself for the sync-mode enums - so a bare factory mock
-// would replace the very classes under test and make the suite vacuous rather
-// than failing.
+// Only the Symitar client constructors are stubbed, and the factory spreads
+// `requireActual` on purpose: core imports `@libum-llc/symitar` itself for the
+// sync-mode enums, so a bare factory mock would replace the very classes under
+// test and make the suite vacuous rather than failing.
+// `@libum-llc/pipelines-core` is not mocked at all - this module uses its real
+// error hierarchy and directory config, which is what these assertions
+// dispatch on.
 jest.mock('@libum-llc/symitar', () => ({
   ...jest.requireActual('@libum-llc/symitar'),
   SymitarHTTPs: jest.fn(),
   SymitarSSH: jest
     .fn()
     .mockImplementation(() => ({ isReady: Promise.resolve() })),
-}));
-jest.mock('@libum-llc/pipelines-core', () => ({
-  ...jest.requireActual('@libum-llc/pipelines-core'),
-  validateApiKey: jest.fn().mockResolvedValue(undefined),
 }));
 // Only `execFileSync`, which the commit-branch guard shells out through.
 // `jest.spyOn` cannot be used here: Node marks `child_process`'s exports
@@ -1063,17 +1059,6 @@ describe('task-orchestration', () => {
         'debug',
         expect.any(Object),
         undefined,
-      );
-    });
-  });
-
-  describe('validateTaskApiKey', () => {
-    it('should delegate to validateApiKey', async () => {
-      await validateTaskApiKey('test-api-key', 'symitar.example.com');
-
-      expect(validateApiKey).toHaveBeenCalledWith(
-        'test-api-key',
-        'symitar.example.com',
       );
     });
   });

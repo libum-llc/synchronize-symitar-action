@@ -95131,7 +95131,6 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.loadSynchronizeConfig = loadSynchronizeConfig;
 exports.createHTTPsClient = createHTTPsClient;
 exports.createSSHClient = createSSHClient;
-exports.validateTaskApiKey = validateTaskApiKey;
 const child_process_1 = __nccwpck_require__(35317);
 const os_1 = __nccwpck_require__(70857);
 const symitar_1 = __nccwpck_require__(88882);
@@ -95521,12 +95520,6 @@ async function createSSHClient(config) {
     await client.isReady;
     return client;
 }
-/**
- * Validates the API key for the given hostname
- */
-async function validateTaskApiKey(apiKey, hostname) {
-    await (0, pipelines_core_1.validateApiKey)(apiKey, hostname);
-}
 
 
 /***/ }),
@@ -95839,6 +95832,7 @@ if (require.main === require.cache[eval('__filename')]) {
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.createSynchronizeDependencies = createSynchronizeDependencies;
+const pipelines_core_1 = __nccwpck_require__(49890);
 const github_pull_request_1 = __nccwpck_require__(76555);
 const github_task_host_1 = __nccwpck_require__(12288);
 const task_orchestration_1 = __nccwpck_require__(86661);
@@ -95868,7 +95862,7 @@ function createSynchronizeDependencies() {
     return {
         task: (0, github_task_host_1.createGitHubTaskHost)(),
         loadConfig: () => config,
-        validateApiKey: task_orchestration_1.validateTaskApiKey,
+        validateApiKey: pipelines_core_1.validateApiKey,
         createHttpsClient: task_orchestration_1.createHTTPsClient,
         createSshClient: task_orchestration_1.createSSHClient,
         pullRequestPublisher: (0, github_pull_request_1.createGitHubPullRequestPublisher)(config.githubToken),
@@ -97827,7 +97821,7 @@ module.exports = {"version":"3.19.0"};
 /***/ ((module) => {
 
 "use strict";
-module.exports = /*#__PURE__*/JSON.parse('{"name":"synchronize-symitar-action","version":"1.3.6","packageManager":"pnpm@10.20.0","description":"GitHub Action to synchronize a directory on the Jack Henry™ credit union core platform","main":"src/main.ts","scripts":{"build":"ncc build src/main.ts -o dist --source-map --license licenses.txt && node -e \\"const fs=require(\'fs\'),path=require(\'path\'),dist=path.resolve(\'dist\');if(fs.existsSync(dist)){for(const entry of fs.readdirSync(dist)){if(entry.endsWith(\'.d.ts\')||entry.endsWith(\'.d.ts.map\')||entry===\'pagent.exe\')fs.rmSync(path.join(dist,entry),{force:true});}for(const entry of [\'build\',\'lib\',\'synchronize\'])fs.rmSync(path.join(dist,entry),{force:true,recursive:true});}\\"","test":"jest --coverage","lint":"eslint --cache --quiet && prettier --check \\"src/**/*.ts\\" \\"__tests__/**/*.ts\\"","lint:fix":"eslint --cache --quiet --fix && prettier --write \\"src/**/*.ts\\" \\"__tests__/**/*.ts\\"","all":"pnpm lint:fix && pnpm build && pnpm test"},"repository":{"type":"git","url":"git+https://github.com/libum-llc/synchronize-symitar-action.git"},"keywords":["poweron","jack henry","symitar","episys","rsync","synchronize","github-action"],"author":"Libum, LLC","license":"MIT","dependencies":{"@actions/core":"^1.10.1","@actions/github":"^6.0.0","@libum-llc/pipelines-core":"1.0.1","@libum-llc/symitar":"1.12.0"},"devDependencies":{"@eslint/eslintrc":"^3.3.5","@types/jest":"^30.0.0","@types/js-yaml":"^4.0.9","@types/node":"^22.20.1","@typescript-eslint/eslint-plugin":"^8.63.0","@typescript-eslint/parser":"^8.63.0","@vercel/ncc":"^0.38.1","eslint":"^9.39.4","eslint-config-prettier":"^10.1.8","eslint-plugin-prettier":"^5.5.6","jest":"^30.4.2","js-yaml":"^4.3.1","prettier":"^3.9.5","ts-jest":"^29.4.11","ts-node":"^10.9.2","typescript":"^5.9.3"}}');
+module.exports = /*#__PURE__*/JSON.parse('{"name":"synchronize-symitar-action","version":"2.0.0","packageManager":"pnpm@10.20.0","description":"GitHub Action to synchronize a directory on the Jack Henry™ credit union core platform","main":"src/main.ts","scripts":{"build":"ncc build src/main.ts -o dist --source-map --license licenses.txt && node -e \\"const fs=require(\'fs\'),path=require(\'path\'),dist=path.resolve(\'dist\');if(fs.existsSync(dist)){for(const entry of fs.readdirSync(dist)){if(entry.endsWith(\'.d.ts\')||entry.endsWith(\'.d.ts.map\')||entry===\'pagent.exe\')fs.rmSync(path.join(dist,entry),{force:true});}for(const entry of [\'build\',\'lib\',\'synchronize\'])fs.rmSync(path.join(dist,entry),{force:true,recursive:true});}\\"","test":"jest --coverage","lint":"eslint --cache --quiet && prettier --check \\"src/**/*.ts\\" \\"__tests__/**/*.ts\\"","lint:fix":"eslint --cache --quiet --fix && prettier --write \\"src/**/*.ts\\" \\"__tests__/**/*.ts\\"","all":"pnpm lint:fix && pnpm build && pnpm test"},"repository":{"type":"git","url":"git+https://github.com/libum-llc/synchronize-symitar-action.git"},"keywords":["poweron","jack henry","symitar","episys","rsync","synchronize","github-action"],"author":"Libum, LLC","license":"MIT","dependencies":{"@actions/core":"^1.10.1","@actions/github":"^6.0.0","@libum-llc/pipelines-core":"1.0.1","@libum-llc/symitar":"1.12.0"},"devDependencies":{"@eslint/eslintrc":"^3.3.5","@types/jest":"^30.0.0","@types/js-yaml":"^4.0.9","@types/node":"^22.20.1","@typescript-eslint/eslint-plugin":"^8.63.0","@typescript-eslint/parser":"^8.63.0","@vercel/ncc":"^0.38.1","eslint":"^9.39.4","eslint-config-prettier":"^10.1.8","eslint-plugin-prettier":"^5.5.6","jest":"^30.4.2","js-yaml":"^4.3.1","prettier":"^3.9.5","ts-jest":"^29.4.11","ts-node":"^10.9.2","typescript":"^5.9.3"}}');
 
 /***/ })
 

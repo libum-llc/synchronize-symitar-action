@@ -10,6 +10,40 @@ GitHub Action to synchronize a directory on the Jack Henry™ credit union core 
 
 ---
 
+## v2.0.0: Upgrading from v1
+
+**No input or output was removed, renamed, or given a different default.** An
+existing v1 workflow keeps working after you change `@v1` to `@v2` — the major
+bump is not about the interface.
+
+What changed is everything behind it. The synchronization logic is no longer
+implemented in this repository: it now comes from
+[`@libum-llc/pipelines-core`](https://github.com/libum-llc/poweron-pipelines/tree/main/packages/core),
+the same host-agnostic package the PowerOn Pipelines Azure DevOps extension
+runs on. This repo is reduced to the GitHub-specific wiring around it, so the
+two stay in step by construction rather than by hand.
+
+Three consequences worth knowing about before you upgrade:
+
+1. **Synchronization is now transactional.** Core snapshots the files a run is
+   about to mutate and restores them if the run fails partway through, instead
+   of leaving the host half-synchronized. A failure that v1 would have left in
+   place is now rolled back and re-reported.
+
+2. **Failure messages and log output are different.** Core uses a typed error
+   hierarchy and a structured logger, so the text your job summaries and log
+   greps see has changed. Nothing about *which* runs fail changed — only how
+   the failure reads.
+
+3. **The action runs on Node 24.** GitHub has deprecated `node20` for actions
+   and already executes `node20` actions on Node 24, so this only removes the
+   deprecation warning. No runner change is needed.
+
+New in v2, both opt-in and off by default: opening a pull request instead of
+committing pulled changes directly (see
+[Opening a Pull Request Instead of Committing](#opening-a-pull-request-instead-of-committing)),
+and `skip-validation` for pushes and mirrors of `powerOns`.
+
 - [Usage](#usage)
   - [Basic Example](#basic-example)
   - [Using HTTPS Connection](#using-https-connection)
@@ -52,7 +86,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Synchronize PowerOns
-        uses: libum-llc/synchronize-symitar-action@v1
+        uses: libum-llc/synchronize-symitar-action@v2
         with:
           directory-type: powerOns
           symitar-hostname: 93.455.43.232
@@ -74,7 +108,7 @@ jobs:
     runs-on: self-hosted
     steps:
       - name: Synchronize PowerOns (HTTPS)
-        uses: libum-llc/synchronize-symitar-action@v1
+        uses: libum-llc/synchronize-symitar-action@v2
         with:
           directory-type: powerOns
           symitar-hostname: 93.455.43.232
@@ -98,7 +132,7 @@ jobs:
     runs-on: self-hosted
     steps:
       - name: Synchronize LetterFiles
-        uses: libum-llc/synchronize-symitar-action@v1
+        uses: libum-llc/synchronize-symitar-action@v2
         with:
           directory-type: letterFiles
           symitar-hostname: 93.455.43.232
@@ -125,7 +159,7 @@ jobs:
     runs-on: self-hosted
     steps:
       - name: Mirror PowerOns
-        uses: libum-llc/synchronize-symitar-action@v1
+        uses: libum-llc/synchronize-symitar-action@v2
         with:
           directory-type: powerOns
           symitar-hostname: 93.455.43.232
@@ -149,7 +183,7 @@ jobs:
     runs-on: self-hosted
     steps:
       - name: Mirror PowerOns while preserving server-managed files
-        uses: libum-llc/synchronize-symitar-action@v1
+        uses: libum-llc/synchronize-symitar-action@v2
         with:
           directory-type: powerOns
           symitar-hostname: 93.455.43.232
@@ -191,7 +225,7 @@ jobs:
           ref: ${{ inputs.commit_branch || 'main' }}
 
       - name: Pull server-managed PowerOns
-        uses: libum-llc/synchronize-symitar-action@v1
+        uses: libum-llc/synchronize-symitar-action@v2
         with:
           directory-type: powerOns
           symitar-hostname: 93.455.43.232
@@ -236,7 +270,7 @@ jobs:
           fetch-depth: 0
 
       - name: Pull server-managed PowerOns
-        uses: libum-llc/synchronize-symitar-action@v1
+        uses: libum-llc/synchronize-symitar-action@v2
         with:
           directory-type: powerOns
           symitar-hostname: 93.455.43.232
@@ -281,7 +315,7 @@ jobs:
     runs-on: self-hosted
     steps:
       - id: pull
-        uses: libum-llc/synchronize-symitar-action@v1
+        uses: libum-llc/synchronize-symitar-action@v2
         with:
           directory-type: powerOns
           symitar-hostname: 93.455.43.232
@@ -337,7 +371,7 @@ jobs:
           ref: ${{ inputs.release_branch || 'main' }}
 
       - name: Release PowerOns
-        uses: libum-llc/synchronize-symitar-action@v1
+        uses: libum-llc/synchronize-symitar-action@v2
         with:
           directory-type: powerOns
           symitar-hostname: ${{ vars.SYMITAR_HOSTNAME }}

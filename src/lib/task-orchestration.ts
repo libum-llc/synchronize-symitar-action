@@ -8,7 +8,6 @@ import {
   DEFAULT_SSH_PORT,
   InputError,
   SymNumberError,
-  validateApiKey,
   type CommonTaskConfig,
   type RepoConfig,
   type SyncMethod,
@@ -539,14 +538,4 @@ export async function createSSHClient(
   await client.isReady;
 
   return client;
-}
-
-/**
- * Validates the API key for the given hostname
- */
-export async function validateTaskApiKey(
-  apiKey: string,
-  hostname: string,
-): Promise<void> {
-  await validateApiKey(apiKey, hostname);
 }
