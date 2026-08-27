@@ -195,9 +195,9 @@ typed errors (`AuthenticationError`, `ConnectionError`, `InputError`,
 `SymNumberError`, `ValidationError`, `ConfigError`, `PowerOnError`) onto
 `core.setFailed`/`core.error` with per-error-type detail.
 
-Two things here must not be "simplified":
+Three things here must not be "simplified":
 
-- **The explicit `process.exit`** in the `require.main === module` block. It is
+- **The forced exit** at the end of the `require.main === module` block. It is
   load-bearing, not defensive: the Symitar client can leave a handle on the
   event loop, and without it the step hung for 14 minutes *after* logging
   success. `poweron-pipelines` does the same at the end of its `executeTask`.
@@ -205,6 +205,39 @@ Two things here must not be "simplified":
   rewrites that expression at bundle time; CI's smoke-test step exists to catch
   a future ncc version breaking the rewrite, which would silently turn the
   bundle into a no-op that exits 0.
+- **`reportFailure`'s try/catch.** Everything downstream resolves the exit code
+  from `process.exitCode`, which only `core.setFailed` sets — so anything that
+  throws *before* `setFailed` runs leaves it unset and the step goes green on a
+  real failure. `handleError` has two such paths: the `ConfigError` and
+  `PowerOnError` branches both `JSON.stringify(error.context)` first, and a
+  circular context throws.
+
+### Keep `src/main.ts` minimal
+
+**Put helpers in `src/lib/`, not in the entry module.** ncc's relocate-loader
+rewrites `require.main === module` in the *entry* module into a form that works
+inside a webpack bundle, and that rewrite is sensitive to what else the entry
+module contains. In `validate-poweron-action`, adding one exported helper
+function to `main.ts` was enough to lose it: the bundle fell back to webpack's
+own mapping, which is *also* true under a plain `require()`, so
+`require('./dist/index.js')` executed the entire action. The same regression
+reproduces here — verified by control: `exitWhenFlushed` in `src/lib/exit.ts`
+emits one rewritten guard, inlined in `main.ts` it emits none.
+
+CI's "Assert the entry guard survived bundling" step asserts on the emitted
+guard in both directions — that it self-executes as a process entry point and
+that it stays inert under `require()`. The grep counts occurrences of the
+executable form rather than merely finding the text, for the same reason the
+core-inlining sentinel has to be chosen carefully: a source comment quoting the
+expression would otherwise satisfy it on its own.
+
+### `src/lib/exit.ts` — flush before exiting
+
+On the runner stdout is a pipe and Node's pipe writes are asynchronous, so
+`process.exit()` discards whatever is still queued — including the `::error::`
+annotations `handleError` wrote a moment earlier. `exitWhenFlushed` waits for
+an empty write to drain before exiting, with a hard timeout so a stdout that
+never drains cannot resurrect the hang the forced exit exists to prevent.
 
 ### `dist/` is committed
 

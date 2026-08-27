@@ -11,6 +11,7 @@ import {
   ValidationError,
 } from '@libum-llc/pipelines-core';
 
+import { exitWhenFlushed } from './lib/exit';
 import { createSynchronizeDependencies } from './synchronize/dependencies';
 import { version } from '../package.json';
 
@@ -160,7 +161,38 @@ export async function run(): Promise<void> {
     );
     core.info(`${logPrefix} ${message}`);
   } catch (error) {
+    reportFailure(error);
+  }
+}
+
+/**
+ * Reports a failure, and cannot itself fail silently.
+ *
+ * Everything below the entry point resolves the exit code from
+ * `process.exitCode`, which `core.setFailed` is what sets. So anything that
+ * throws *before* `setFailed` runs leaves the exit code unset, and the step
+ * goes green on a genuine failure. `handleError` has two such paths - the
+ * `ConfigError` and `PowerOnError` branches both call
+ * `JSON.stringify(error.context)` before their `setFailed`, and `context` is a
+ * `Record<string, unknown>` populated by callers, so a circular or
+ * BigInt-bearing value throws. Rather than audit every reporting path for
+ * throw-safety forever, failure is recorded here even when reporting it is
+ * what broke.
+ *
+ * @param error The error to report
+ */
+function reportFailure(error: unknown): void {
+  try {
     handleError(error);
+  } catch (reportingError) {
+    process.exitCode = 1;
+    core.setFailed(
+      `${logPrefix} Failed while reporting an error (${
+        reportingError instanceof Error
+          ? reportingError.message
+          : String(reportingError)
+      }). Original error: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }
 
@@ -192,7 +224,16 @@ export function resolveExitCode(
 // with it.
 /* istanbul ignore next */
 if (require.main === module) {
-  void run().finally(() => {
-    process.exit(resolveExitCode(process.exitCode));
-  });
+  void run()
+    .catch((error: unknown) => {
+      // `run` catches its own failures, so reaching here means the reporting
+      // path itself threw. Never let that resolve to a green step.
+      process.exitCode = 1;
+      core.setFailed(
+        `${logPrefix} Unhandled error: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    })
+    .finally(() => {
+      exitWhenFlushed(resolveExitCode(process.exitCode));
+    });
 }

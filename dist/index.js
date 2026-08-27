@@ -94858,6 +94858,74 @@ function socketOnError() {
 
 /***/ }),
 
+/***/ 82880:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.exitWhenFlushed = exitWhenFlushed;
+/**
+ * How long to wait for stdout to drain before exiting anyway.
+ *
+ * Generous relative to a pipe flush and negligible relative to the hang the
+ * forced exit exists to prevent.
+ */
+const FLUSH_TIMEOUT_MS = 2_000;
+/**
+ * Exits once everything already written to stdout has actually left the
+ * process.
+ *
+ * On the runner stdout is a pipe, and Node's pipe writes are asynchronous:
+ * `process.exit()` discards whatever is still queued. `main.ts`'s error
+ * handler writes the `::error::` annotations - the failure message, the
+ * hostname, and any error context - and returns immediately, so exiting in the
+ * very next tick can drop precisely the diagnostics that make a red step
+ * actionable. Writing an empty
+ * chunk and waiting for its callback is enough, because stream callbacks fire
+ * in write order: when this one runs, everything queued ahead of it is out.
+ *
+ * The timeout is not belt-and-braces. Forcing the exit is load-bearing (see
+ * the entry point in `main.ts`), so a stdout that never drains must not
+ * reintroduce the hang it exists to prevent.
+ *
+ * This lives outside `main.ts` on purpose. ncc's relocate-loader rewrites the
+ * `require.main === module` guard in the entry module into a form that works
+ * inside a webpack bundle, and that rewrite is sensitive to what else the
+ * entry module contains - adding this function to `main.ts` silently lost it,
+ * leaving webpack's own mapping, which is also true under a plain `require()`.
+ * The bundle then ran the whole action on import. CI asserts on the emitted
+ * guard (see "Assert the entry guard survived bundling"), but keeping the
+ * entry module minimal avoids the trap in the first place.
+ *
+ * Deliberately does not spell out the rewritten expression: CI greps the
+ * bundle for it, and a comment carrying the same text would satisfy that grep
+ * on its own.
+ *
+ * @param code The exit code to terminate with
+ * @param exit Injectable for tests; defaults to `process.exit`
+ * @param write Injectable for tests; defaults to `process.stdout.write`
+ */
+function exitWhenFlushed(code, exit = (exitCode) => process.exit(exitCode), write = (chunk, callback) => process.stdout.write(chunk, callback)) {
+    let exited = false;
+    const finish = () => {
+        if (exited) {
+            return;
+        }
+        exited = true;
+        exit(code);
+    };
+    const timer = setTimeout(finish, FLUSH_TIMEOUT_MS);
+    timer.unref?.();
+    write('', () => {
+        clearTimeout(timer);
+        finish();
+    });
+}
+
+
+/***/ }),
+
 /***/ 76555:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -95661,6 +95729,7 @@ exports.run = run;
 exports.resolveExitCode = resolveExitCode;
 const core = __importStar(__nccwpck_require__(16966));
 const pipelines_core_1 = __nccwpck_require__(49890);
+const exit_1 = __nccwpck_require__(82880);
 const dependencies_1 = __nccwpck_require__(74010);
 const package_json_1 = __nccwpck_require__(8330);
 const logPrefix = '[SynchronizeSymitar]';
@@ -95789,7 +95858,34 @@ async function run() {
         core.info(`${logPrefix} ${message}`);
     }
     catch (error) {
+        reportFailure(error);
+    }
+}
+/**
+ * Reports a failure, and cannot itself fail silently.
+ *
+ * Everything below the entry point resolves the exit code from
+ * `process.exitCode`, which `core.setFailed` is what sets. So anything that
+ * throws *before* `setFailed` runs leaves the exit code unset, and the step
+ * goes green on a genuine failure. `handleError` has two such paths - the
+ * `ConfigError` and `PowerOnError` branches both call
+ * `JSON.stringify(error.context)` before their `setFailed`, and `context` is a
+ * `Record<string, unknown>` populated by callers, so a circular or
+ * BigInt-bearing value throws. Rather than audit every reporting path for
+ * throw-safety forever, failure is recorded here even when reporting it is
+ * what broke.
+ *
+ * @param error The error to report
+ */
+function reportFailure(error) {
+    try {
         handleError(error);
+    }
+    catch (reportingError) {
+        process.exitCode = 1;
+        core.setFailed(`${logPrefix} Failed while reporting an error (${reportingError instanceof Error
+            ? reportingError.message
+            : String(reportingError)}). Original error: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
 /**
@@ -95817,8 +95913,15 @@ function resolveExitCode(exitCode) {
 // with it.
 /* istanbul ignore next */
 if (require.main === require.cache[eval('__filename')]) {
-    void run().finally(() => {
-        process.exit(resolveExitCode(process.exitCode));
+    void run()
+        .catch((error) => {
+        // `run` catches its own failures, so reaching here means the reporting
+        // path itself threw. Never let that resolve to a green step.
+        process.exitCode = 1;
+        core.setFailed(`${logPrefix} Unhandled error: ${error instanceof Error ? error.message : String(error)}`);
+    })
+        .finally(() => {
+        (0, exit_1.exitWhenFlushed)(resolveExitCode(process.exitCode));
     });
 }
 

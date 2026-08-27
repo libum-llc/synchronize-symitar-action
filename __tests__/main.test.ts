@@ -351,6 +351,58 @@ describe('main', () => {
   });
 });
 
+describe('failure reporting cannot fail silently', () => {
+  // Reachable, not theoretical: PowerOnError.context is a
+  // Record<string, unknown> populated by callers, and handleError's
+  // `JSON.stringify(error.context)` runs *before* its core.setFailed - on the
+  // ConfigError branch as well as the PowerOnError one. A circular context
+  // therefore threw out of the reporting path with the exit code still unset,
+  // and a genuine synchronization failure reported as a pass.
+  const circularContext = (): Record<string, unknown> => {
+    const context: Record<string, unknown> = { directory: 'HELPFILES' };
+    context.self = context;
+    return context;
+  };
+
+  let originalExitCode: typeof process.exitCode;
+
+  beforeEach(() => {
+    originalExitCode = process.exitCode;
+    process.exitCode = undefined;
+  });
+
+  afterEach(() => {
+    process.exitCode = originalExitCode;
+  });
+
+  it.each([
+    ['ConfigError', () => new ConfigError('Bad config', circularContext())],
+    ['PowerOnError', () => new PowerOnError('Sync failed', circularContext())],
+  ])('does not reject when handleError throws on a %s', async (_name, make) => {
+    mockRunSynchronizeDirectoryTask.mockRejectedValue(make());
+
+    await expect(run()).resolves.toBeUndefined();
+  });
+
+  it('records the failure when handleError itself throws', async () => {
+    mockRunSynchronizeDirectoryTask.mockRejectedValue(
+      new PowerOnError('Sync failed', circularContext()),
+    );
+
+    await run();
+
+    expect(process.exitCode).toBe(1);
+    expect(mockSetFailed).toHaveBeenCalledWith(
+      expect.stringContaining('Failed while reporting an error'),
+    );
+    // The original failure must survive into the message, not be swallowed by
+    // the reporting failure that replaced it.
+    expect(mockSetFailed).toHaveBeenCalledWith(
+      expect.stringContaining('Sync failed'),
+    );
+  });
+});
+
 describe('resolveExitCode', () => {
   // Guards the fix for a live-observed hang: the action logged success and
   // then sat on the runner for 14 minutes until the job timeout killed it,
