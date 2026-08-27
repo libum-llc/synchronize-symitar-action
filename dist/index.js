@@ -95208,6 +95208,8 @@ const utils_1 = __nccwpck_require__(49387);
 const HOSTNAME_PATTERN = /^[a-zA-Z0-9.-]+$/;
 const MIN_PORT = 1;
 const MAX_PORT = 65535;
+const MIN_SYM_NUMBER = 0;
+const MAX_SYM_NUMBER = 9999;
 // The pipelines directory defaults, which the Azure DevOps extension reads
 // from `.poweron-pipelines/config.yml`. They are deliberately identical to
 // core's own `DIRECTORY_CONFIG[type].defaultPath` values, so this table only
@@ -95345,9 +95347,20 @@ function loadCommonConfig() {
     const symitarUserNumber = (0, utils_1.getInput)('symitarUserNumber', true);
     const symitarUserPassword = (0, utils_1.getInput)('symitarUserPassword', true);
     const debug = (0, utils_1.getBoolInput)('debug', false);
-    // Validate symNumber
+    // Validate symNumber.
+    //
+    // `isValidNumber` alone is not enough: it is a `typeof`/`NaN` check, so
+    // `-627`, `627.5`, `1e6` and `Infinity` all pass it and reach
+    // SymitarSSH/SymitarHTTPs as the sym to synchronize. v1 bounded this with
+    // `parseInt` + `0-9999`, and that typo guard is worth keeping - the input is
+    // a four-digit sym number, and every value outside that range is a mistake.
     if (!(0, utils_1.isValidNumber)(symNumber)) {
         throw new pipelines_core_1.SymNumberError(`No valid symNumber found for build branch (${buildBranchName}). Provide the 'sym-number' input as a number.`, buildBranchName);
+    }
+    if (!Number.isInteger(symNumber) ||
+        symNumber < MIN_SYM_NUMBER ||
+        symNumber > MAX_SYM_NUMBER) {
+        throw new pipelines_core_1.SymNumberError(`Invalid symNumber '${symNumberInput}'. Must be a whole number between ${MIN_SYM_NUMBER}-${MAX_SYM_NUMBER}.`, buildBranchName);
     }
     return {
         logPrefix,
@@ -95452,6 +95465,19 @@ function loadSynchronizeConfig() {
     // this input itself through the `TaskHost`, and `SynchronizeDirectoryConfig`
     // is part of the package's public API, so it cannot carry a field core does
     // not define.
+    // The `|| 'ssh'` mirrors `action.yml`'s own default rather than inventing
+    // one. A workflow *can* still arrive here empty - `connection-type: ${{
+    // vars.CONN_TYPE }}` with the variable unset passes an explicit empty
+    // string, and GitHub does not substitute the action.yml default when the key
+    // is present - and this loader then validates `'ssh'` and moves on. That is
+    // deliberate rather than an oversight: `connectionType` is not returned on
+    // the config, so the local default changes nothing about how the run
+    // behaves. Core re-reads the input itself through `requireInput` and throws
+    // `Input required and not supplied: connection-type`, which is already a
+    // clear message, and it does so before any Symitar connection is opened -
+    // one license-server round trip is the whole cost. Rejecting empty here as
+    // well was tried and reverted: it buys very little and turns a value a
+    // workflow may legitimately expect to fall back into a hard failure.
     const connectionType = (0, utils_1.getInput)('connectionType', false) || 'ssh';
     if (connectionType !== 'https' && connectionType !== 'ssh') {
         throw new pipelines_core_1.InputError(`Invalid connection type: '${connectionType}'. Must be 'https' or 'ssh'`, 'connectionType');
@@ -95483,13 +95509,22 @@ function loadSynchronizeConfig() {
     // but Azure has no equivalent of `actions/checkout`'s arbitrary `ref`.
     const commitBranch = (0, utils_1.getInput)('commitBranch', false) || undefined;
     // The pull-request target still needs a concrete branch: core's
-    // `getRequiredPrValue` throws when it is empty. `GITHUB_REF_NAME` is the
-    // fallback here rather than on `commitBranch` because a pull request must name
-    // a base, whereas a push can legitimately mean "wherever HEAD already tracks".
+    // `getRequiredPrValue` throws when it is empty. The fallback exists because a
+    // pull request must name a base, whereas a push can legitimately mean
+    // "wherever HEAD already tracks" - which is why it is here and not on
+    // `commitBranch`.
+    //
+    // It falls back only when the build ref really is a branch. On a
+    // `pull_request` trigger `GITHUB_REF` is `refs/pull/42/merge`, so
+    // `GITHUB_REF_NAME` is `42/merge` and `buildBranchName` is the whole ref
+    // (that regex only strips `refs/heads/`); on a tag build both are the tag.
+    // Passing either to `pulls.create` names a base that does not exist, and the
+    // run fails with a raw GitHub 422 - after the pull has already mutated the
+    // workspace and committed.
+    const buildBranchIsBranch = pipelines_core_1.TARGET_BRANCH_PATTERN.test(commonConfig.buildBranch);
     const pullRequestTargetBranch = (0, utils_1.getInput)('pullRequestTargetBranch', false) ||
         commitBranch ||
-        process.env.GITHUB_REF_NAME ||
-        commonConfig.buildBranchName ||
+        (buildBranchIsBranch ? commonConfig.buildBranchName : undefined) ||
         undefined;
     const pullRequestBranch = (0, utils_1.getInput)('pullRequestBranch', false) || 'chore/symitar-pull';
     const pullRequestTitle = (0, utils_1.getInput)('pullRequestTitle', false) ||
@@ -95512,14 +95547,33 @@ function loadSynchronizeConfig() {
         throw new pipelines_core_1.InputError("The 'github-token' input is required when 'create-pull-request' is enabled. " +
             'Pass `github-token: ${{ secrets.GITHUB_TOKEN }}` (or a PAT with `pull-requests: write`).', 'githubToken');
     }
+    // Same reasoning, same place: core only discovers a missing base when it
+    // calls `getRequiredPrValue`, by which point the pull has run and the
+    // workspace has been committed to.
+    if (createPullRequest && !pullRequestTargetBranch) {
+        throw new pipelines_core_1.InputError("The 'pull-request-target-branch' input is required when 'create-pull-request' is enabled and the workflow is not running on a branch. " +
+            'A pull_request or tag build has no branch to default to - set it explicitly, or set `commit-branch`.', 'pullRequestTargetBranch');
+    }
     // Parse SFTP concurrency
     const sftpConcurrencyInput = (0, utils_1.getInput)('sftpConcurrency', false) || '4';
     const sftpConcurrency = parseInt(sftpConcurrencyInput, 10);
     if (isNaN(sftpConcurrency) || sftpConcurrency < 1 || sftpConcurrency > 20) {
         throw new pipelines_core_1.InputError(`Invalid SFTP concurrency: '${sftpConcurrencyInput}'. Must be between 1-20`, 'sftpConcurrency');
     }
-    // Parse symitar app port (optional, only for HTTPS)
-    const symitarAppPortInput = (0, utils_1.getInput)('symitarAppPort', false);
+    // Parse symitar app port - required for HTTPS, unused for SSH.
+    //
+    // Required *here* rather than left to `createHTTPsClient`, which is where it
+    // used to surface. Core reaches that factory only after `validateApiKey` and
+    // after `await createSshClient(config)` has already opened a session on the
+    // production Symitar host, and the matching `end()` lives in the
+    // transaction's cleanup, which that throw never reaches - so a misconfigured
+    // HTTPS run burned a license round trip, logged into the Sym, and leaked the
+    // connection. v1 rejected the combination during input validation; this
+    // restores that, and matches the rule the `github-token` check above follows.
+    const symitarAppPortInput = (0, utils_1.getInput)('symitarAppPort', false).trim();
+    if (connectionType === 'https' && !symitarAppPortInput) {
+        throw new pipelines_core_1.InputError("The 'symitar-app-port' input is required when 'connection-type' is 'https' (typically 42 + the sym number, e.g. 42627).", 'symitarAppPort');
+    }
     let symitarAppPort;
     if (symitarAppPortInput) {
         symitarAppPort = parseInt(symitarAppPortInput, 10);

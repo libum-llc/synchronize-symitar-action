@@ -12,9 +12,10 @@ GitHub Action to synchronize a directory on the Jack Henry™ credit union core 
 
 ## v2.0.0: Upgrading from v1
 
-**No input or output was removed, renamed, or given a different default.** An
-existing v1 workflow keeps working after you change `@v1` to `@v2` — the major
-bump is not about the interface.
+**No input or output was removed, renamed, or given a different default**, and
+the major bump is not about the interface. One behavior change does need
+checking before you switch `@v1` to `@v2`, though — see *Boolean inputs are now
+strict* below.
 
 What changed is everything behind it. The synchronization logic is no longer
 implemented in this repository: it now comes from
@@ -43,6 +44,25 @@ New in v2, both opt-in and off by default: opening a pull request instead of
 committing pulled changes directly (see
 [Opening a Pull Request Instead of Committing](#opening-a-pull-request-instead-of-committing)),
 and `skip-validation` for pushes and mirrors of `powerOns`.
+
+### Boolean inputs are now strict
+
+`dry-run`, `skip-validation`, `pull-preserved-only`, `commit-pulled-changes`,
+`create-pull-request` and `debug` are parsed with `@actions/core`'s
+`getBooleanInput`, which accepts only `true`, `True`, `TRUE`, `false`, `False`
+and `FALSE`. v1 compared the raw string to `'true'`, so **every other spelling
+silently meant `false`**. Two consequences when upgrading:
+
+- **`yes`, `1`, `on`, `y` now fail the step** with a `TypeError` instead of
+  being read as `false`. Loud, and easy to fix.
+- **`TRUE`, `True` flip from `false` to `true`.** This one is silent, so it is
+  the one to grep for. `dry-run: True` was a *live* run under v1 and is a dry
+  run under v2 — harmless. `skip-validation: TRUE` and
+  `pull-preserved-only: TRUE` flip the other way: they were inert in v1 and now
+  actually take effect, changing what gets validated and what gets pulled.
+
+Search your workflows for these six inputs and confirm every value is
+lowercase `true` or `false`.
 
 - [Usage](#usage)
   - [Basic Example](#basic-example)

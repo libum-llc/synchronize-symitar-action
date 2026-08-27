@@ -410,6 +410,31 @@ describe('task-orchestration', () => {
 
         expect(() => loadSynchronizeConfig()).toThrow(SymNumberError);
       });
+
+      // `isValidNumber` is only a typeof/NaN check, so every value below
+      // reached SymitarSSH/SymitarHTTPs as the sym to synchronize. v1 bounded
+      // this with parseInt + 0-9999 and that typo guard is worth keeping.
+      it.each([
+        ['a negative sym', '-627'],
+        ['a fractional sym', '627.5'],
+        ['exponent notation above the range', '1e6'],
+        ['above the four-digit range', '10000'],
+        ['Infinity', 'Infinity'],
+      ])('should throw SymNumberError for %s', (_name, symNumber) => {
+        setActionInputs({ 'sym-number': symNumber });
+
+        expect(() => loadSynchronizeConfig()).toThrow(SymNumberError);
+      });
+
+      it.each([
+        ['the bottom of the range', '0', 0],
+        ['a single digit', '7', 7],
+        ['the top of the range', '9999', 9999],
+      ])('should accept %s', (_name, input, expected) => {
+        setActionInputs({ 'sym-number': input });
+
+        expect(loadSynchronizeConfig().symNumber).toBe(expected);
+      });
     });
 
     describe('list inputs', () => {
@@ -564,7 +589,34 @@ describe('task-orchestration', () => {
       });
 
       it.each([['https'], ['ssh']])('should accept %s', (connectionType) => {
-        setActionInputs({ 'connection-type': connectionType });
+        setActionInputs({
+          'connection-type': connectionType,
+          // https requires the app port up front; ssh ignores it.
+          'symitar-app-port': '42627',
+        });
+
+        expect(() => loadSynchronizeConfig()).not.toThrow();
+      });
+
+      // v1 rejected this during input validation. v2 had deferred it to
+      // createHTTPsClient, which core only reaches after validateApiKey and
+      // after createSshClient has opened a session on the production host -
+      // and the matching end() lives in cleanup that the throw never reaches,
+      // so the connection leaked.
+      it('should require symitar-app-port before contacting Symitar on https', () => {
+        setActionInputs({ 'connection-type': 'https' });
+
+        expect(() => loadSynchronizeConfig()).toThrow(InputError);
+        expect(() => loadSynchronizeConfig()).toThrow(
+          /'symitar-app-port' input is required when 'connection-type' is 'https'/,
+        );
+        expect(() => loadSynchronizeConfig()).toThrow(
+          expect.objectContaining({ inputName: 'symitarAppPort' }),
+        );
+      });
+
+      it('should not require symitar-app-port on ssh', () => {
+        setActionInputs({ 'connection-type': 'ssh' });
 
         expect(() => loadSynchronizeConfig()).not.toThrow();
       });
@@ -815,19 +867,45 @@ describe('task-orchestration', () => {
       // Unlike commitBranch, this one must resolve to something concrete: core's
       // `getRequiredPrValue` throws on an empty target, and a pull request has
       // to name a base branch.
-      it('should fall back to GITHUB_REF_NAME for the target branch', () => {
-        process.env.GITHUB_REF_NAME = 'release/1.0';
+      it('should fall back to the build branch for the target branch', () => {
+        process.env.GITHUB_REF = 'refs/heads/release/1.0';
 
         expect(loadSynchronizeConfig().pullRequestTargetBranch).toBe(
           'release/1.0',
         );
       });
 
-      it('should prefer commit-branch over GITHUB_REF_NAME for the target branch', () => {
-        process.env.GITHUB_REF_NAME = 'release/1.0';
+      it('should prefer commit-branch over the build branch', () => {
+        process.env.GITHUB_REF = 'refs/heads/release/1.0';
         setActionInputs({ 'commit-branch': 'main' });
 
         expect(loadSynchronizeConfig().pullRequestTargetBranch).toBe('main');
+      });
+
+      // `refs/pull/42/merge` is not a branch: GITHUB_REF_NAME would be
+      // '42/merge' and buildBranchName the whole ref, and pulls.create would
+      // fail with a raw 422 naming a base that does not exist - after the pull
+      // had already mutated the workspace and committed.
+      it.each([
+        ['a pull request merge ref', 'refs/pull/42/merge'],
+        ['a tag build', 'refs/tags/v1.2.3'],
+      ])('should not default the target branch on %s', (_name, ref) => {
+        process.env.GITHUB_REF = ref;
+
+        expect(loadSynchronizeConfig().pullRequestTargetBranch).toBeUndefined();
+      });
+
+      it('should refuse a create-pull-request run with no resolvable base', () => {
+        process.env.GITHUB_REF = 'refs/pull/42/merge';
+        setActionInputs({
+          'sync-mode': 'pull',
+          'create-pull-request': 'true',
+          'github-token': 'ghs_token',
+        });
+
+        expect(() => loadSynchronizeConfig()).toThrow(
+          /'pull-request-target-branch' input is required/,
+        );
       });
 
       it('should read the pull request inputs', () => {
