@@ -22,7 +22,7 @@ const HOSTNAME_PATTERN = /^[a-zA-Z0-9.-]+$/;
 const MIN_PORT = 1;
 const MAX_PORT = 65535;
 const MIN_SYM_NUMBER = 0;
-const MAX_SYM_NUMBER = 9999;
+const MAX_SYM_NUMBER = 999;
 
 // The pipelines directory defaults, which the Azure DevOps extension reads
 // from `.poweron-pipelines/config.yml`. They are deliberately identical to
@@ -215,8 +215,9 @@ function loadCommonConfig(): CommonTaskConfig {
   // `isValidNumber` alone is not enough: it is a `typeof`/`NaN` check, so
   // `-627`, `627.5`, `1e6` and `Infinity` all pass it and reach
   // SymitarSSH/SymitarHTTPs as the sym to synchronize. v1 bounded this with
-  // `parseInt` + `0-9999`, and that typo guard is worth keeping - the input is
-  // a four-digit sym number, and every value outside that range is a mistake.
+  // `parseInt` + `0-9999`; the bound here is `0-999`, deliberately tighter,
+  // because a sym number is three digits (v1's validate action padded it with
+  // `padStart(3, '0')`). Every value outside that range is a typo.
   if (!isValidNumber(symNumber)) {
     throw new SymNumberError(
       `No valid symNumber found for build branch (${buildBranchName}). Provide the 'sym-number' input as a number.`,

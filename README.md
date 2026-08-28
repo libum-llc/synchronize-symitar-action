@@ -443,14 +443,14 @@ preserve-server-files: |
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------- | -------- | ---------------------------------------------------- |
 | `directory-type`        | Type of Symitar directory: `powerOns`, `letterFiles`, `dataFiles`, `helpFiles`                                    | Yes      | -                                                    |
 | `symitar-hostname`      | The endpoint by which you connect to the Symitar host                                                             | Yes      | -                                                    |
-| `sym-number`            | The directory (aka Sym) number for your connection                                                                | Yes      | -                                                    |
+| `sym-number`            | The directory (aka Sym) number for your connection. A whole number between 0 and 999; anything else is rejected as a typo. | Yes      | -                                                    |
 | `symitar-user-number`   | Your Symitar Quest user number                                                                                    | Yes      | -                                                    |
 | `symitar-user-password` | Your Symitar Quest password                                                                                       | Yes      | -                                                    |
 | `ssh-username`          | The AIX user name for the Symitar host                                                                            | Yes      | -                                                    |
 | `ssh-password`          | The AIX password for the Symitar host                                                                             | Yes      | -                                                    |
 | `ssh-port`              | The port to connect to the SSH server                                                                             | No       | `22`                                                 |
 | `api-key`               | Your PowerOn Pipelines API Key from [Libum Portal](https://portal.libum.io)                                       | Yes      | -                                                    |
-| `symitar-app-port`      | SymAppServer port. Typically `42` + `symNumber`                                                                   | No       | -                                                    |
+| `symitar-app-port`      | SymAppServer port. Typically `42` + `symNumber`. **Required when `connection-type` is `https`** — the run fails on input validation, before the Symitar host is contacted. | No       | -                                                    |
 | `connection-type`       | Connection type: `https` or `ssh`                                                                                 | No       | `ssh`                                                |
 | `local-directory-path`  | Local directory path containing files to synchronize                                                              | No       | Standard path for the selected directory type        |
 | `sync-mode`             | Synchronization mode: `push`, `pull`, or `mirror`                                                                 | Yes      | -                                                    |
@@ -469,7 +469,7 @@ preserve-server-files: |
 | `git-user-email`        | Git author email used when `commit-pulled-changes` is enabled                                                     | No       | `bot@libum.io`                                       |
 | `create-pull-request`   | When `sync-mode` is `pull`, commit to `pull-request-branch` and open (or reuse) a pull request instead of pushing to `commit-branch`. Requires `github-token`. Mutually exclusive with `commit-pulled-changes`. | No       | `false`                                              |
 | `pull-request-branch`   | Head branch the pulled changes are committed to. Force-pushed with `--force-with-lease`. Must differ from `pull-request-target-branch`.                            | No       | `chore/symitar-pull`                                 |
-| `pull-request-target-branch` | Base branch the pull request targets                                                                         | No       | `commit-branch`, then the checked-out branch         |
+| `pull-request-target-branch` | Base branch the pull request targets. Falls back only to a real branch — see [Runs Not on a Branch](#runs-not-on-a-branch). | No       | `commit-branch`, then the checked-out branch         |
 | `pull-request-title`    | Title of the pull request opened when `create-pull-request` is enabled                                            | No       | `chore: sync server-managed Symitar files`           |
 | `pull-request-body`     | Body of the pull request opened when `create-pull-request` is enabled                                             | No       | `Auto-generated pull of server-managed Symitar files.` |
 | `github-token`          | Token used to open the pull request. Needs `pull-requests: write`. Required whenever `create-pull-request` is `true`; the run fails before contacting Symitar if it is missing. | No       | `''`                                                 |
@@ -501,6 +501,20 @@ preserve-server-files: |
 | `outlier-files`     | JSON array of outlier file names                                           |
 | `pull-request-id`   | Number of the pull request opened or reused by `create-pull-request`       |
 | `pull-request-url`  | Web URL of the pull request opened or reused by `create-pull-request`      |
+
+The six file-count outputs are published together whenever a synchronization
+completes — every directory type, every sync mode, dry run or not. Directory
+types that cannot install, and pull runs, publish `0` for
+`files-installed`/`files-uninstalled` rather than omitting them, so a step
+reading a declared output never has to tell "absent" from "none".
+
+They are **not** published when a run aborts before the synchronization
+completes — a bad input, a failed API-key check, or a connection failure. A
+later step reading `steps.<id>.outputs.outliers-count` after such a run gets an
+empty string, not `0`; if it runs with `if: always()`, default the value
+(`${{ steps.sync.outputs.outliers-count || '0' }}`). `pull-request-id` and
+`pull-request-url` are conditional on a pull request actually being opened or
+reused, as described under [Opening a Pull Request Instead of Committing](#opening-a-pull-request-instead-of-committing).
 
 ### Secrets
 
