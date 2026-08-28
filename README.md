@@ -366,7 +366,7 @@ GitHub setup requirements:
 
 ## List Inputs
 
-`install-poweron-list`, `validate-ignore-list`, and `preserve-server-files` accept either a comma-delimited string or a YAML list.
+`install-poweron-list`, `validate-ignore-list`, and `preserve-server-files` accept commas, newlines, or a YAML block sequence — all three forms work, and they can be mixed.
 
 ```yaml
 # Comma-delimited
@@ -382,6 +382,8 @@ preserve-server-files: |
   - RD.*
   - PFR.*
 ```
+
+Leading `- ` markers are stripped and blank entries are dropped. `validate-poweron-action` parses its list inputs the same way.
 
 ## Customizing
 
