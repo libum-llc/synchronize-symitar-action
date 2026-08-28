@@ -10,60 +10,6 @@ GitHub Action to synchronize a directory on the Jack Henry™ credit union core 
 
 ---
 
-## v2.0.0: Upgrading from v1
-
-**No input or output was removed, renamed, or given a different default**, and
-the major bump is not about the interface. One behavior change does need
-checking before you switch `@v1` to `@v2`, though — see *Boolean inputs are now
-strict* below.
-
-What changed is everything behind it. The synchronization logic is no longer
-implemented in this repository: it now comes from
-[`@libum-llc/pipelines-core`](https://github.com/libum-llc/poweron-pipelines/tree/main/packages/core),
-the same host-agnostic package the PowerOn Pipelines Azure DevOps extension
-runs on. This repo is reduced to the GitHub-specific wiring around it, so the
-two stay in step by construction rather than by hand.
-
-Three consequences worth knowing about before you upgrade:
-
-1. **Synchronization is now transactional.** Core snapshots the files a run is
-   about to mutate and restores them if the run fails partway through, instead
-   of leaving the host half-synchronized. A failure that v1 would have left in
-   place is now rolled back and re-reported.
-
-2. **Failure messages and log output are different.** Core uses a typed error
-   hierarchy and a structured logger, so the text your job summaries and log
-   greps see has changed. Nothing about *which* runs fail changed — only how
-   the failure reads.
-
-3. **The action runs on Node 24.** GitHub has deprecated `node20` for actions
-   and already executes `node20` actions on Node 24, so this only removes the
-   deprecation warning. No runner change is needed.
-
-New in v2, both opt-in and off by default: opening a pull request instead of
-committing pulled changes directly (see
-[Opening a Pull Request Instead of Committing](#opening-a-pull-request-instead-of-committing)),
-and `skip-validation` for pushes and mirrors of `powerOns`.
-
-### Boolean inputs are now strict
-
-`dry-run`, `skip-validation`, `pull-preserved-only`, `commit-pulled-changes`,
-`create-pull-request` and `debug` are parsed with `@actions/core`'s
-`getBooleanInput`, which accepts only `true`, `True`, `TRUE`, `false`, `False`
-and `FALSE`. v1 compared the raw string to `'true'`, so **every other spelling
-silently meant `false`**. Two consequences when upgrading:
-
-- **`yes`, `1`, `on`, `y` now fail the step** with a `TypeError` instead of
-  being read as `false`. Loud, and easy to fix.
-- **`TRUE`, `True` flip from `false` to `true`.** This one is silent, so it is
-  the one to grep for. `dry-run: True` was a *live* run under v1 and is a dry
-  run under v2 — harmless. `skip-validation: TRUE` and
-  `pull-preserved-only: TRUE` flip the other way: they were inert in v1 and now
-  actually take effect, changing what gets validated and what gets pulled.
-
-Search your workflows for these six inputs and confirm every value is
-lowercase `true` or `false`.
-
 - [Usage](#usage)
   - [Basic Example](#basic-example)
   - [Using HTTPS Connection](#using-https-connection)
@@ -316,6 +262,8 @@ jobs:
 
 `pull-request-branch` must differ from `pull-request-target-branch`. When a pull request is opened or reused, the run publishes `pull-request-id` and `pull-request-url`; when the pull produced nothing to commit, or the run was a dry run, neither output is published.
 
+`pull-request-target-branch` defaults to `commit-branch`, and then to the branch the workflow is running on — but only when it really is a branch. A `pull_request` trigger runs on `refs/pull/42/merge` and a tag build on `refs/tags/...`; neither names a base that `pulls.create` could target, so rather than opening a pull request against a branch that does not exist, the run fails on input validation and tells you to set `pull-request-target-branch` (or `commit-branch`) explicitly. This only affects `create-pull-request` runs on those triggers; a normal `workflow_dispatch` or `schedule` run on a branch resolves as before.
+
 If your organization requires pull requests to be opened by a real account (for example so that branch protection's "require review from someone other than the author" applies), pass a PAT with `pull-requests: write` as `github-token` instead of `secrets.GITHUB_TOKEN`.
 
 > **Check out the target branch.** `pull-request-branch` is created from whatever
@@ -469,7 +417,7 @@ preserve-server-files: |
 | `git-user-email`        | Git author email used when `commit-pulled-changes` is enabled                                                     | No       | `bot@libum.io`                                       |
 | `create-pull-request`   | When `sync-mode` is `pull`, commit to `pull-request-branch` and open (or reuse) a pull request instead of pushing to `commit-branch`. Requires `github-token`. Mutually exclusive with `commit-pulled-changes`. | No       | `false`                                              |
 | `pull-request-branch`   | Head branch the pulled changes are committed to. Force-pushed with `--force-with-lease`. Must differ from `pull-request-target-branch`.                            | No       | `chore/symitar-pull`                                 |
-| `pull-request-target-branch` | Base branch the pull request targets. Falls back only to a real branch — see [Runs Not on a Branch](#runs-not-on-a-branch). | No       | `commit-branch`, then the checked-out branch         |
+| `pull-request-target-branch` | Base branch the pull request targets. The fallback applies only when the workflow is running on a branch — see [Opening a Pull Request Instead of Committing](#opening-a-pull-request-instead-of-committing). | No       | `commit-branch`, then the checked-out branch         |
 | `pull-request-title`    | Title of the pull request opened when `create-pull-request` is enabled                                            | No       | `chore: sync server-managed Symitar files`           |
 | `pull-request-body`     | Body of the pull request opened when `create-pull-request` is enabled                                             | No       | `Auto-generated pull of server-managed Symitar files.` |
 | `github-token`          | Token used to open the pull request. Needs `pull-requests: write`. Required whenever `create-pull-request` is `true`; the run fails before contacting Symitar if it is missing. | No       | `''`                                                 |
