@@ -4,37 +4,375 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-GitHub Action to synchronize directories (PowerOns, LetterFiles, DataFiles, HelpFiles) on the Jack Henry Symitar credit union core platform. Supports both SSH and HTTPS connections with push, pull, and mirror sync modes. File transfers can use SFTP (with configurable concurrency) or rsync.
+GitHub Action to synchronize directories (PowerOns, LetterFiles, DataFiles,
+HelpFiles) on the Jack Henry Symitar credit union core platform. Supports both
+SSH and HTTPS connections with push, pull, and mirror sync modes. File transfers
+can use SFTP (with configurable concurrency) or rsync.
 
-## Commands
+## Build Commands
+
+Always use pnpm, never npm.
 
 ```bash
-pnpm build          # Build the action (compiles to dist/index.js via ncc)
-pnpm test           # Run tests with coverage
-pnpm lint           # Check linting and formatting
-pnpm lint:fix       # Fix linting and formatting issues
-pnpm all            # Run lint:fix, build, and test
+pnpm install          # Install dependencies
+pnpm build            # Build with ncc to dist/
+pnpm test             # Run tests with coverage
+pnpm lint             # Check linting and formatting
+pnpm lint:fix         # Fix linting and formatting issues
+pnpm all              # Run lint:fix, build, and test
 ```
 
 Run a single test file:
 ```bash
-pnpm test -- __tests__/synchronize.test.ts
+pnpm test -- src/lib/__tests__/task-orchestration.test.ts
 ```
 
 ## Architecture
 
-**Entry Point**: `src/main.ts` - GitHub Action entry point that parses inputs, validates configuration, calls `synchronizeToSymitar()`, and outputs results.
+**The rule: shared logic lives in `@libum-llc/pipelines-core`; this repo holds
+only GitHub-specific wiring.**
 
-**Core Modules**:
-- `src/synchronize.ts` - Main synchronization logic with `synchronizeViaHTTPs()` and `synchronizeViaSSH()` functions using `@libum-llc/symitar` client
-- `src/directory-config.ts` - Directory type configuration mapping (powerOns→REPWRITERSPECS, letterFiles→LETTERSPECS, etc.)
-- `src/subscription.ts` - API key validation against Libum license server with retry logic
+The synchronization logic is not written here. It lives in
+[`@libum-llc/pipelines-core`](https://github.com/libum-llc/poweron-pipelines/tree/main/packages/core),
+a host-agnostic package published to GitHub Packages and shared with the
+`poweron-pipelines` Azure DevOps extension and `validate-poweron-action`. Core
+owns the `runSynchronizeDirectoryTask` runner, the mutation/snapshot/rollback
+transaction machinery, the error hierarchy, the logger, directory-type
+resolution, git commit/push helpers, License API subscription checks, and the
+config *types*. It imports no CI host SDK and reads no host environment
+variables.
 
-**Key Dependency**: `@libum-llc/symitar` provides `SymitarHTTPs` and `SymitarSSH` clients with `syncFiles()` method for file synchronization.
+What lives here is everything that knows it is running on GitHub Actions: input
+parsing, config *loading*, client construction, the `TaskHost` adapter, the
+Octokit `PullRequestPublisher`, and the error-to-annotation mapping.
 
-**Client Log Levels**: Clients are initialized with `'warn'` log level by default, `'debug'` when debug input is enabled.
+This repo previously carried *vendored copies* of core's modules under
+`src/lib/`, kept in sync by hand under a "never edit these, change upstream and
+re-vendor" rule, plus a `task-shim.ts` and a `@lib/*` tsconfig alias that let
+Azure-shaped imports resolve. All of that is gone. If shared behavior needs to
+change, change it in `poweron-pipelines/packages/core`, publish a new version,
+and bump the dependency here — do not reintroduce a local copy of a core module,
+a task shim, or a path alias.
 
-## Environment Variables
+### Import from the package entrypoint only
 
-- `SST_STAGE_PREFIX` - Stage prefix for development environments
-- `IS_SANDBOX=true` - Use sandbox license server
+```ts
+import { runSynchronizeDirectoryTask, type TaskHost } from '@libum-llc/pipelines-core';
+```
+
+Never deep-import into `@libum-llc/pipelines-core/dist/...`. `dist/`'s layout is
+build output and can change in a patch release; only what core's `src/index.ts`
+re-exports is stable. The entrypoint also carries the
+`/// <reference types="node" />` directive that makes core's `Buffer`-typed
+surface resolve. (One test reads a file under core's `dist/` as *text* to check
+this repo's output mapping against what core actually publishes — that is not an
+import, and it is commented as such.)
+
+Note that importing the package applies core's module-scope
+`https.globalAgent.options.rejectUnauthorized = false`. That is a deliberate,
+documented owner decision in core (Symitar hosts commonly present certificates
+that fail default verification), not something to work around here.
+
+### `src/lib/github-task-host.ts` — the `TaskHost` adapter
+
+`TaskHost` is core's contract for talking to a CI host — the intersection of
+what Azure Pipelines, GitHub Actions, and GitLab CI can all do.
+`createGitHubTaskHost()` implements it over `@actions/core`. Two things about it
+are load-bearing:
+
+- **Name translation.** Core names inputs and outputs in camelCase
+  (`connectionType`, `filesDeployed`, `outliersCount`); `action.yml` spells them
+  in kebab-case. Everything crossing this boundary goes through
+  `toActionInputName()`.
+- **`setOutput` must be a real step output.** Core deliberately leaves Azure's
+  `setVariable(name, value, isSecret, isOutput)` flags out of the interface, so
+  each adapter supplies its own equivalent. The GitHub equivalent of
+  `isOutput: true` is `@actions/core`'s `setOutput`, **not** `exportVariable`.
+  Using `exportVariable` writes to `$GITHUB_ENV` instead of `$GITHUB_OUTPUT`:
+  the step still succeeds, still logs its summary, and the consuming workflow
+  silently reads an empty string. `src/lib/__tests__/github-task-host.test.ts`
+  and the end-to-end case in `src/synchronize/dependencies.test.ts` assert
+  against real `$GITHUB_OUTPUT` / `$GITHUB_ENV` files precisely because a mocked
+  `@actions/core` cannot tell the two apart.
+
+`github-task-host.test.ts` also greps core's compiled runner for its
+`setOutput` names and cross-checks all eight against `action.yml`'s `outputs:`
+block, so a core release that publishes a new output cannot land silently.
+
+Related: `setSecret` masks whole registered values, not substrings. Never log a
+fragment of a secret and expect the mask to catch it — `main.ts` prints only
+whether `AuthenticationError.apiKeyPrefix` is present, never its value.
+
+### `src/lib/github-pull-request.ts` — the `PullRequestPublisher`
+
+Core owns *when* a pull request is opened, which branches it spans, and the
+reuse-don't-duplicate policy; this file is the Octokit call and the credential
+it needs. It is the GitHub counterpart of `poweron-pipelines`'s
+`src/lib/azure-pull-request.ts`.
+
+Three things are easy to get wrong:
+
+- **`head` and `base` arrive as `refs/heads/<branch>`**, because that is the
+  form the Azure Repos API requires and core normalizes for it. GitHub's pulls
+  API wants bare branch names, so `trimBranchRef` strips the prefix here.
+- **The list query filters `head` as `owner:branch`.** A bare branch name
+  matches nothing, so every run would create a duplicate instead of reusing.
+- **A 422 "already exists" from `create` is a reuse signal, not a failure.**
+  The list and the create are two round trips; a concurrent run can open one in
+  between.
+
+A fourth thing is worth knowing but is not fixable here: core's
+`commitPulledChanges` creates the head branch with `git checkout -B` from
+*whatever HEAD already is*, and never rebases it onto the target. A run that
+checked out `develop` and targets `main` therefore opens a pull request carrying
+all of `develop`'s divergence. That is a documented sharp edge of
+`create-pull-request`, not something the commit-branch guard covers — the guard
+is unreachable on those runs because `commitPulledChanges` and
+`createPullRequest` are rejected as mutually exclusive first.
+
+`createPullRequest` is enforced from two directions: `loadSynchronizeConfig`
+refuses the run when `github-token` is missing (before Symitar is contacted),
+and core throws `InputError` if the input is on and no publisher was supplied —
+so `src/synchronize/dependencies.ts` supplies one unconditionally.
+
+### `src/lib/task-orchestration.ts` — config loading
+
+Builds core's `SynchronizeDirectoryConfig` from `action.yml` inputs instead of
+from `.poweron-pipelines/config.yml`. Also home to the validations the Azure
+extension gets from its `task.json` pick lists and its zod config schema, and
+which therefore have to be restored here:
+
+- `connectionType`, `syncMode` and `syncMethod` value checks
+- hostname and port format checks, and the `sftp-concurrency` 1-20 range
+- `dry-run` is read as a **required** boolean, so an explicitly empty value
+  fails the run rather than silently defaulting to a live mutation
+- `commitPulledChanges` / `createPullRequest` are pull-mode only and mutually
+  exclusive
+- `github-token` is required when `create-pull-request` is on
+- `commit-branch` is left **undefined** when unset, which is what "defaults to
+  the checked-out branch" means: core then runs a bare `git push`. Resolving it
+  to `GITHUB_REF_NAME` would name the branch the *workflow* ran from, not the
+  one `actions/checkout` put in the workspace, and would turn a working v1
+  config (dispatch from `main`, check out `develop`) into a hard failure whose
+  advice is backwards. `pull-request-target-branch` *does* fall back — to
+  `buildBranchName`, because core's `getRequiredPrValue` throws on an empty
+  base — but **only when the build ref is genuinely a branch**. On a
+  `pull_request` trigger `GITHUB_REF` is `refs/pull/42/merge` and on a tag
+  build it is the tag; either would name a base `pulls.create` cannot target,
+  so a `create-pull-request` run that cannot resolve one is refused at load
+  time rather than failing on a raw GitHub 422 after the pull has already
+  mutated the workspace
+- **`symitar-app-port` is required at load time when `connection-type` is
+  `https`.** Not left to `createHTTPsClient`: core reaches that factory only
+  after `validateApiKey` *and* after `await createSshClient(config)` has opened
+  a session on the production host, and the matching `end()` lives in the
+  transaction cleanup that the throw never reaches — so the connection leaked.
+  v1 rejected the combination during input validation; this restores it
+- **`sym-number` is a whole number 0-999.** `isValidNumber` is only a
+  `typeof`/`NaN` check, so `-627`, `627.5` and `1e6` otherwise reach the
+  Symitar client as the sym to synchronize. Deliberately tighter than the
+  `0-9999` v1 allowed, because a sym number is three digits.
+  `validate-poweron-action` bounds it identically; keep the two in step
+- `local-directory-path` is deliberately **not** normalized or folded into
+  `repoConfig.inputs`. Core's runner passes the raw input to
+  `getLocalDirectoryPath`, which prefers it over `configPaths` whenever it is
+  non-empty, so anything written there is unreachable. Core validates the raw
+  value itself (`ConfigError` on a backslash, a leading `/`, a drive letter, a
+  `..` segment or a NUL) and joins with an explicit `/`, so no trailing-slash
+  normalization is needed or possible at this boundary.
+- **`parseListInput()`** — splits on commas *and* newlines and strips a leading
+  `- `. Deliberately more permissive than the Azure extension's comma-only
+  parser, because `action.yml` inputs are plain strings and the README has
+  documented the multi-line and YAML block-sequence forms since v1. Narrowing it
+  would silently collapse a `- RD.*` / `- PFR.*` block into one pattern that
+  matches nothing, and every preserved server file would start being overwritten.
+
+It also resolves the two things core refuses to read from the environment:
+`sourcePath`/`sourceAbsolutePath`/`workspacePath` (all `GITHUB_WORKSPACE` — a
+GitHub Action has no Azure-style artifact staging split) and `tempDirectory`
+(`RUNNER_TEMP`, falling back to `os.tmpdir()`).
+
+`SynchronizeActionConfig` extends core's config with `githubToken`, the one
+credential core has no field for — the same shape `poweron-pipelines` uses for
+`azureDevOpsAccessToken`.
+
+### `src/synchronize/dependencies.ts` — dependency injection
+
+`runSynchronizeDirectoryTask` takes all of its host interactions through a
+`SynchronizeDirectoryTaskDependencies` object. This file is the concrete
+implementation. It loads the config **once, eagerly**, so the token can reach the
+publisher without appearing on a core-owned type and so a bad input fails before
+Symitar is contacted.
+
+### `src/main.ts` — the entry point
+
+Masks secret inputs, calls
+`runSynchronizeDirectoryTask(createSynchronizeDependencies())`, and maps core's
+typed errors (`AuthenticationError`, `ConnectionError`, `InputError`,
+`SymNumberError`, `ValidationError`, `ConfigError`, `PowerOnError`) onto
+`core.setFailed`/`core.error` with per-error-type detail.
+
+Three things here must not be "simplified":
+
+- **The forced exit** at the end of the `require.main === module` block. It is
+  load-bearing, not defensive: the Symitar client can leave a handle on the
+  event loop, and without it the step hung for 14 minutes *after* logging
+  success. `poweron-pipelines` does the same at the end of its `executeTask`.
+- **`resolveExitCode` and the `require.main === module` guard itself.** ncc
+  rewrites that expression at bundle time; CI's smoke-test step exists to catch
+  a future ncc version breaking the rewrite, which would silently turn the
+  bundle into a no-op that exits 0.
+- **`reportFailure`'s try/catch.** Everything downstream resolves the exit code
+  from `process.exitCode`, which only `core.setFailed` sets — so anything that
+  throws *before* `setFailed` runs leaves it unset and the step goes green on a
+  real failure. `handleError` has two such paths: the `ConfigError` and
+  `PowerOnError` branches both `JSON.stringify(error.context)` first, and a
+  circular context throws.
+
+### Keep `src/main.ts` minimal
+
+**Put helpers in `src/lib/`, not in the entry module.** ncc's relocate-loader
+rewrites `require.main === module` in the *entry* module into a form that works
+inside a webpack bundle, and that rewrite is sensitive to what else the entry
+module contains. In `validate-poweron-action`, adding one exported helper
+function to `main.ts` was enough to lose it: the bundle fell back to webpack's
+own mapping, which is *also* true under a plain `require()`, so
+`require('./dist/index.js')` executed the entire action. The same regression
+reproduces here — verified by control: `exitWhenFlushed` in `src/lib/exit.ts`
+emits one rewritten guard, inlined in `main.ts` it emits none.
+
+CI's "Assert the entry guard survived bundling" step asserts on the emitted
+guard in both directions — that it self-executes as a process entry point and
+that it stays inert under `require()`. The grep counts occurrences of the
+executable form rather than merely finding the text, for the same reason the
+core-inlining sentinel has to be chosen carefully: a source comment quoting the
+expression would otherwise satisfy it on its own.
+
+### `src/lib/exit.ts` — flush before exiting
+
+On the runner stdout is a pipe and Node's pipe writes are asynchronous, so
+`process.exit()` discards whatever is still queued — including the `::error::`
+annotations `handleError` wrote a moment earlier. `exitWhenFlushed` waits for
+an empty write to drain before exiting, with a hard timeout so a stdout that
+never drains cannot resurrect the hang the forced exit exists to prevent.
+
+### `dist/` is committed
+
+`action.yml` ships `dist/index.js`, so the committed bundle — not `src/` — is
+what consumers run, and they never run `pnpm install`. Two consequences:
+
+- **`@libum-llc/pipelines-core` and `@libum-llc/symitar` must be inlined by
+  ncc.** They are private GitHub Packages dependencies; a leftover runtime
+  `require()` would throw `MODULE_NOT_FOUND` for every consumer while passing
+  every test here. CI asserts on this, with a sentinel string that only core's
+  runner can contribute. Pick such a marker carefully: ncc copies source
+  *comments* into the bundle verbatim, so a marker that also appears in a
+  comment here would survive an externalized build and make the check vacuous.
+  Verify any replacement with
+  `pnpm exec ncc build src/main.ts -o <scratch> --external @libum-llc/pipelines-core`
+  and confirm the marker count is 0 there.
+- **Rebuild and commit `dist/` with any `src/` change.** CI's `Check dist` step
+  rebuilds and fails if the committed tree differs. ncc output varies by Node
+  major and by pnpm major (hoisting changes what gets bundled), so build with
+  the Node and pnpm that CI pins: Node 24 (`.github/workflows/ci.yml`) and the
+  pnpm in `package.json`'s `packageManager` field.
+
+### Live integration
+
+`.github/workflows/live-integration.yml` runs the committed bundle against SYM
+627 on a self-hosted runner. Two properties are load-bearing and must not be
+relaxed:
+
+- **The fork guard** in the job's `if:`. This is a public repo; a job-level
+  `if:` is evaluated before a runner is assigned, so a fork's pull request never
+  reaches the runner. Never switch the trigger to `pull_request_target`.
+- **Every scenario pairs `dry-run: true` with a non-PowerOn `directory-type`.**
+  Both halves are required, and the second is the one that is easy to lose.
+
+#### `dry-run: true` does NOT make a `powerOns` run read-only
+
+This is the single most important thing to know before editing that workflow.
+**PowerOn validation is not dry-run gated.** In `@libum-llc/symitar@1.12.0`,
+`dist/shared/sync-orchestrator.js:169-171`:
+
+```js
+shouldValidate = hasPowerOnOptions
+              && syncMode !== SymitarSyncMode.PULL
+              && !options.powerOn?.skipValidation;
+```
+
+There is no `isDryRun` term, and the block runs at line 195 — *before*
+`operations.executeSync` at line 215, which is where the dry-run short-circuit
+actually lives (`clients/ssh/ssh.synchronize.js:10`,
+`clients/https/https.synchronize.js:13`; both clients share this orchestrator).
+Validation writes to the host: `clients/ssh/ssh.validate.js` sftp-writes each
+changed PowerOn into REPWRITERSPECS under a temporary name with mode 0770,
+chmods and chgrps it, compiles it, then unlinks it — so a run that dies between
+the write and the unlink leaves a temp file on a live Sym.
+
+`hasPowerOnOptions` is `options.powerOn && remoteDirectory === REPWRITERSPECS`.
+Core always sets `options.powerOn`, so the **directory type is the only
+discriminator**, and every current scenario uses `helpFiles` → `HELPFILES`.
+
+To add a `powerOns` scenario, one of these must hold: `sync-mode: pull`
+(validation is skipped for PULL), `skip-validation: 'true'`, or an explicit,
+reviewed decision to accept host writes from a pull-request-triggered workflow.
+`src/lib/__tests__/live-integration-workflow.test.ts` enforces exactly that
+disjunction in CI, so this cannot regress silently.
+
+Two related traps in reading that workflow's assertions:
+
+- `outliers-count`, `files-installed` and `files-uninstalled` are **structurally
+  zero** under dry run — outliers are populated only inside the SFTP transport,
+  which dry-run short-circuits before reaching, and install/uninstall are gated
+  on `!isDryRun`. Asserting `0` there proves the output plumbing works, not that
+  no drift exists.
+- `sync-method: rsync` is never exercised live, because `executeSyncTransport`
+  returns a synthetic result before choosing a transport.
+
+Mutating coverage belongs in `poweron-pipelines`' own live suite, which owns
+run-scoped fixtures and recovery scripts.
+
+### Where documentation goes
+
+`README.md` documents **how to use the action** — inputs, outputs, examples,
+behaviours a consumer needs at the point of writing a workflow. It carries no
+upgrade notes, no breaking-change list and no v1-to-v2 comparison, not even a
+pointer to one. That was an explicit owner decision.
+
+`CHANGELOG.md` carries a version's changes: what broke, what is new, and — just
+as important — an **Explicitly unchanged** section recording behaviour that was
+altered during development and reverted, so nobody reintroduces it. The
+`connection-type` default and the list-input parser are both in there for that
+reason.
+
+This file is for whoever is changing the code. Keep it in step: several
+entries below record a trap that has already been hit once.
+
+### Registry auth
+
+`@libum-llc/*` packages come from GitHub Packages. Auth lives in the **global**
+`~/.npmrc`; the repo `.gitignore`s `.npmrc` and must not contain one. In CI,
+`actions/setup-node` writes the registry config and `NODE_AUTH_TOKEN` supplies
+the token.
+
+### Key Dependencies
+
+- `@libum-llc/pipelines-core` — the shared, host-agnostic task runner and
+  supporting modules
+- `@libum-llc/symitar` — proprietary Symitar client (`SymitarHTTPs`,
+  `SymitarSSH`). Core pins this to an **exact** version; keep this repo's
+  version identical to core's, or the tree gets two copies and `instanceof`
+  checks across them break silently.
+- `@actions/core` — GitHub Actions toolkit, reached through
+  `github-task-host.ts` and `utils.ts`
+- `@actions/github` — Octokit, reached only through `github-pull-request.ts`
+
+### Testing notes
+
+`@libum-llc/pipelines-core` is a real dependency, so a bare
+`jest.mock('@libum-llc/pipelines-core', () => ({ ... }))` replaces the error
+hierarchy that `main.ts` dispatches on and the helpers core's own runner calls,
+which makes suites vacuous rather than failing. Spread `jest.requireActual` and
+override only what you mean to stub. The same applies to
+`jest.mock('@libum-llc/symitar', ...)`, since core imports it too.

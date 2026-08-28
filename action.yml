@@ -88,6 +88,38 @@ inputs:
     description: 'Git author email used when commit-pulled-changes is enabled'
     required: false
     default: 'bot@libum.io'
+  create-pull-request:
+    description: 'When sync-mode is pull, commit the pulled changes to pull-request-branch, push it, and open (or reuse) a pull request into pull-request-target-branch instead of pushing to commit-branch. Requires github-token. Mutually exclusive with commit-pulled-changes. Never opens a pull request during dry-run.'
+    required: false
+    default: 'false'
+  pull-request-branch:
+    description: 'Head branch the pulled changes are committed to when create-pull-request is enabled. Force-pushed with --force-with-lease. Must differ from pull-request-target-branch.'
+    required: false
+    default: 'chore/symitar-pull'
+  pull-request-target-branch:
+    description: 'Base branch the pull request targets when create-pull-request is enabled. Defaults to commit-branch, which itself defaults to the checked-out branch.'
+    required: false
+    default: ''
+  pull-request-title:
+    description: 'Title of the pull request opened when create-pull-request is enabled'
+    required: false
+    default: 'chore: sync server-managed Symitar files'
+  pull-request-body:
+    description: 'Body of the pull request opened when create-pull-request is enabled'
+    required: false
+    default: 'Auto-generated pull of server-managed Symitar files.'
+  github-token:
+    description: 'Token used to open the pull request when create-pull-request is enabled. Needs `pull-requests: write` - the default GITHUB_TOKEN only has it when the job grants that permission. Required whenever create-pull-request is true; the run fails before contacting Symitar if it is missing.'
+    required: false
+    default: ''
+  skip-validation:
+    description: >-
+      Skip PowerOn validation before a push or mirror. Only applies to the powerOns directory type; pull never validates.
+      Note that validation is NOT skipped by dry-run: it uploads each changed PowerOn to REPWRITERSPECS under a temporary
+      name, compiles it on the host and removes it again, so a dry-run push of powerOns still writes to the Symitar host.
+      Set this to true when you need a push or mirror of powerOns that touches nothing on the host.
+    required: false
+    default: 'false'
   sync-method:
     description: 'The transport method for file synchronization: sftp (default) or rsync'
     required: false
@@ -114,7 +146,14 @@ outputs:
     description: 'Number of server files that differ from local but are NOT preserve-matched (server-side drift detection). Only populated when sync-mode is pull and pull-preserved-only is true.'
   outlier-files:
     description: 'JSON array of outlier file names'
+  pull-request-id:
+    description: 'Number of the pull request opened or reused by create-pull-request. Only published when a pull request was actually opened or reused - not on dry runs, and not when the pull produced no changes to commit.'
+  pull-request-url:
+    description: 'Web URL of the pull request opened or reused by create-pull-request. Published under the same conditions as pull-request-id.'
 
 runs:
-  using: 'node20'
+  # node24: GitHub has deprecated node20 for actions and already executes
+  # node20 actions on Node 24, so declaring it explicitly removes the
+  # deprecation warning and matches the Node that CI builds dist/ with.
+  using: 'node24'
   main: 'dist/index.js'

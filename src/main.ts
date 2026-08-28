@@ -1,338 +1,239 @@
 import * as core from '@actions/core';
-import { synchronizeToSymitar, ConnectionType, SyncMode, SyncMethod } from './synchronize';
-import { version } from '../package.json';
-import { AuthenticationError, ConnectionError } from './subscription';
+
 import {
-  DirectoryType,
-  isValidDirectoryType,
-  getDirectoryConfig,
-  getLocalDirectoryPath,
-  calculateTotalChanges,
-} from './directory-config';
-import { commitPulledChanges } from './git';
+  runSynchronizeDirectoryTask,
+  AuthenticationError,
+  ConfigError,
+  ConnectionError,
+  InputError,
+  PowerOnError,
+  SymNumberError,
+  ValidationError,
+} from '@libum-llc/pipelines-core';
 
-function parseListInput(value: string): string[] {
-  return value
-    .split(/[,\n]/)
-    .map((f) => f.trim().replace(/^-\s*/, ''))
-    .filter((f) => f.length > 0);
-}
+import { exitWhenFlushed } from './lib/exit';
+import { createSynchronizeDependencies } from './synchronize/dependencies';
+import { version } from '../package.json';
 
-export async function run(): Promise<void> {
-  const logPrefix = '[SynchronizeSymitar]';
+const logPrefix = '[SynchronizeSymitar]';
 
-  try {
-    // Get inputs
-    const directoryTypeInput = core.getInput('directory-type', { required: true });
-    const localDirectoryPathInput = core.getInput('local-directory-path', { required: false });
-    const connectionType = core.getInput('connection-type', { required: true }) as ConnectionType;
-    const syncMode = core.getInput('sync-mode', { required: true }) as SyncMode;
-    const isDryRun = core.getInput('dry-run', { required: false }) === 'true';
-    const symitarHostname = core.getInput('symitar-hostname', { required: true });
-    const symitarAppPortInput = core.getInput('symitar-app-port', { required: false });
-    const sshUsername = core.getInput('ssh-username', { required: true });
-    const sshPassword = core.getInput('ssh-password', { required: true });
-    const sshPortInput = core.getInput('ssh-port', { required: false }) || '22';
-    const symNumberInput = core.getInput('sym-number', { required: true });
-    const symitarUserNumber = core.getInput('symitar-user-number', { required: true });
-    const symitarUserPassword = core.getInput('symitar-user-password', { required: true });
-    const apiKey = core.getInput('api-key', { required: true }).trim();
-    const installPowerOnListInput =
-      core.getInput('install-poweron-list', { required: false }) || '';
-    const validateIgnoreListInput =
-      core.getInput('validate-ignore-list', { required: false }) || '';
-    const preserveServerFilesInput =
-      core.getInput('preserve-server-files', { required: false }) || '';
-    const pullPreservedOnly = core.getInput('pull-preserved-only', { required: false }) === 'true';
-    const commitPulledChangesEnabled =
-      core.getInput('commit-pulled-changes', { required: false }) === 'true';
-    const commitMessage =
-      core.getInput('commit-message', { required: false }) ||
-      'chore: sync server-managed Symitar files [skip ci]';
-    const commitBranch = core.getInput('commit-branch', { required: false }) || undefined;
-    const gitUserName = core.getInput('git-user-name', { required: false }) || 'libum-bot';
-    const gitUserEmail = core.getInput('git-user-email', { required: false }) || 'bot@libum.io';
-    const syncMethodInput = core.getInput('sync-method', { required: false }) || 'sftp';
-    const sftpConcurrencyInput = core.getInput('sftp-concurrency', { required: false }) || '4';
-    const debug = core.getInput('debug', { required: false }) === 'true';
-
-    // Mask sensitive information
-    core.setSecret(apiKey);
-    core.setSecret(symitarUserPassword);
-    core.setSecret(sshPassword);
-
-    // Validate directory type
-    if (!isValidDirectoryType(directoryTypeInput)) {
-      throw new Error(
-        `Invalid directory type: ${directoryTypeInput}. Must be one of: powerOns, letterFiles, dataFiles, helpFiles`,
-      );
-    }
-    const directoryType: DirectoryType = directoryTypeInput;
-
-    // Validate connection type
-    if (connectionType !== 'https' && connectionType !== 'ssh') {
-      throw new Error(`Invalid connection type: ${connectionType}. Must be 'https' or 'ssh'`);
-    }
-
-    // Validate sync mode
-    if (syncMode !== 'push' && syncMode !== 'pull' && syncMode !== 'mirror') {
-      throw new Error(`Invalid sync mode: ${syncMode}. Must be 'push', 'pull', or 'mirror'`);
-    }
-
-    if (commitPulledChangesEnabled && syncMode !== 'pull') {
-      throw new Error('commit-pulled-changes can only be used when sync-mode is pull');
-    }
-
-    // Validate sync method
-    if (syncMethodInput !== 'sftp' && syncMethodInput !== 'rsync') {
-      throw new Error(`Invalid sync method: ${syncMethodInput}. Must be 'sftp' or 'rsync'`);
-    }
-    const syncMethod: SyncMethod = syncMethodInput;
-
-    // Validate and parse SFTP concurrency
-    const sftpConcurrency = parseInt(sftpConcurrencyInput, 10);
-    if (isNaN(sftpConcurrency) || sftpConcurrency < 1 || sftpConcurrency > 20) {
-      throw new Error(`Invalid SFTP concurrency: ${sftpConcurrencyInput}. Must be between 1-20`);
-    }
-
-    // Validate hostname format
-    if (!symitarHostname.match(/^[a-zA-Z0-9.-]+$/)) {
-      throw new Error(`Invalid hostname format: ${symitarHostname}`);
-    }
-
-    // Validate and parse SSH port
-    const sshPort = parseInt(sshPortInput, 10);
-    if (isNaN(sshPort) || sshPort < 1 || sshPort > 65535) {
-      throw new Error(`Invalid SSH port: ${sshPortInput}. Must be between 1-65535`);
-    }
-
-    // Validate and parse Symitar app port (required for HTTPS)
-    let symitarAppPort: number | undefined;
-    if (connectionType === 'https') {
-      if (!symitarAppPortInput) {
-        throw new Error('symitar-app-port is required when connection-type is https');
-      }
-      symitarAppPort = parseInt(symitarAppPortInput, 10);
-      if (isNaN(symitarAppPort) || symitarAppPort < 1 || symitarAppPort > 65535) {
-        throw new Error(
-          `Invalid Symitar app port: ${symitarAppPortInput}. Must be between 1-65535`,
-        );
-      }
-    }
-
-    // Parse sym number
-    const symNumber = parseInt(symNumberInput, 10);
-    if (isNaN(symNumber) || symNumber < 0 || symNumber > 9999) {
-      throw new Error(`Invalid sym number: ${symNumberInput}. Must be between 0-9999`);
-    }
-
-    // Get directory config
-    const directoryConfig = getDirectoryConfig(directoryType);
-
-    // Get local directory path
-    const localDirectoryPath = getLocalDirectoryPath(
-      directoryType,
-      localDirectoryPathInput || undefined,
-    );
-
-    // Parse install PowerOn list (only applies to PowerOns)
-    const installPowerOnList = parseListInput(installPowerOnListInput);
-
-    // Parse validate ignore list
-    const validateIgnoreList = parseListInput(validateIgnoreListInput);
-
-    // Parse preserve server files
-    const preserveServerFiles = parseListInput(preserveServerFilesInput);
-
-    core.info(`${logPrefix} Starting Symitar synchronization (v${version})`);
-    core.info(`${logPrefix} Directory Type: ${directoryConfig.name}`);
-    core.info(`${logPrefix} Connection Type: ${connectionType.toUpperCase()}`);
-    core.info(`${logPrefix} Sync Mode: ${syncMode}`);
-    core.info(`${logPrefix} Sync Method: ${syncMethod.toUpperCase()}`);
-    if (syncMethod === 'sftp') {
-      core.info(`${logPrefix} SFTP Concurrency: ${sftpConcurrency}`);
-    }
-    core.info(`${logPrefix} Hostname: ${symitarHostname}`);
-    if (connectionType === 'https') {
-      core.info(`${logPrefix} Symitar App Port: ${symitarAppPort}`);
-    } else {
-      core.info(`${logPrefix} SSH Port: ${sshPort}`);
-    }
-    core.info(`${logPrefix} Sym: ${symNumber}`);
-    core.info(`${logPrefix} Local Directory: ${localDirectoryPath}`);
-    core.info(`${logPrefix} Dry Run: ${isDryRun}`);
-    core.info(`${logPrefix} Debug: ${debug}`);
-    core.info(`${logPrefix} API Key: ${apiKey ? '✓ provided' : '✗ missing'}`);
-
-    if (directoryConfig.supportsInstall && installPowerOnList.length > 0) {
-      core.info(`${logPrefix} Install PowerOn List: ${installPowerOnList.join(', ')}`);
-    }
-
-    if (validateIgnoreList.length > 0) {
-      core.info(`${logPrefix} Validate Ignore List: ${validateIgnoreList.join(', ')}`);
-    }
-
-    if (preserveServerFiles.length > 0) {
-      core.info(`${logPrefix} Preserve Server Files: ${preserveServerFiles.join(', ')}`);
-    }
-
-    if (pullPreservedOnly && preserveServerFiles.length === 0) {
-      core.info(
-        `${logPrefix} Pull preserved only is enabled, but no preserve-server-files patterns were configured. Nothing to pull.`,
-      );
-    }
-
-    // Run synchronization
-    const startTime = Date.now();
-    const result = await synchronizeToSymitar({
-      symitarHostname,
-      symNumber,
-      symitarUserNumber,
-      symitarUserPassword,
-      sshUsername,
-      sshPassword,
-      sshPort,
-      symitarAppPort,
-      apiKey,
-      localDirectoryPath,
-      directoryType,
-      connectionType,
-      syncMode,
-      syncMethod,
-      sftpConcurrency,
-      isDryRun,
-      installPowerOnList,
-      validateIgnoreList,
-      preserveServerFiles,
-      pullPreservedOnly,
-      debug,
-      logPrefix,
-    });
-
-    await commitPulledChanges({
-      enabled: commitPulledChangesEnabled,
-      isDryRun,
-      syncMode,
-      localDirectoryPath,
-      commitMessage,
-      commitBranch,
-      gitUserName,
-      gitUserEmail,
-      logPrefix,
-    });
-
-    const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
-
-    // Set outputs
-    core.setOutput('files-deployed', result.filesDeployed);
-    core.setOutput('files-deleted', result.filesDeleted);
-    core.setOutput('files-installed', result.filesInstalled);
-    core.setOutput('files-uninstalled', result.filesUninstalled);
-    core.setOutput('outliers-count', result.outliersCount);
-    core.setOutput('outlier-files', JSON.stringify(result.outlierFiles));
-
-    if (result.outliersCount > 0) {
-      core.warning(
-        `Drift detected: ${result.outliersCount} server file(s) differ from local and are not preserve-matched: ${result.outlierFiles.join(', ')}`,
-      );
-    }
-
-    // Calculate total changes
-    const totalChanges = calculateTotalChanges(directoryType, {
-      deployed: result.deployedFiles,
-      deleted: result.deletedFiles,
-      installed: result.installedFiles,
-      uninstalled: result.uninstalledFiles,
-    });
-
-    // Log summary
-    core.info('');
-    core.info(`${logPrefix} ========================================`);
-    core.info(
-      `${logPrefix} Synchronization Summary - ${directoryConfig.name}${isDryRun ? ' (DRY RUN)' : ''}`,
-    );
-    core.info(`${logPrefix} ========================================`);
-
-    if (totalChanges === 0) {
-      core.info(`${logPrefix} No changes to synchronize`);
-    } else {
-      core.info(`${logPrefix} Files Deployed: ${result.filesDeployed}`);
-      if (result.deployedFiles.length > 0) {
-        for (const file of result.deployedFiles) {
-          core.info(`${logPrefix}   + ${file}`);
-        }
-      }
-      core.info(`${logPrefix} Files Deleted: ${result.filesDeleted}`);
-      if (result.deletedFiles.length > 0) {
-        for (const file of result.deletedFiles) {
-          core.info(`${logPrefix}   - ${file}`);
-        }
-      }
-      if (directoryConfig.supportsInstall) {
-        core.info(`${logPrefix} Files Installed: ${result.filesInstalled}`);
-        if (result.installedFiles.length > 0) {
-          for (const file of result.installedFiles) {
-            core.info(`${logPrefix}   ✓ ${file}`);
-          }
-        }
-        core.info(`${logPrefix} Files Uninstalled: ${result.filesUninstalled}`);
-        if (result.uninstalledFiles.length > 0) {
-          for (const file of result.uninstalledFiles) {
-            core.info(`${logPrefix}   ✗ ${file}`);
-          }
-        }
-      }
-    }
-
-    if (result.outliersCount > 0) {
-      core.info(`${logPrefix} Outliers (server-side drift): ${result.outliersCount}`);
-      for (const file of result.outlierFiles) {
-        core.info(`${logPrefix}   ⚠ ${file}`);
-      }
-    }
-
-    core.info(`${logPrefix} ========================================`);
-    core.info(`${logPrefix} Completed in ${elapsedTime}s`);
-
-    if (isDryRun) {
-      core.info(`${logPrefix} This was a dry run - no changes were made`);
-    } else {
-      core.info(`${logPrefix} Synchronization completed successfully!`);
-    }
-  } catch (error) {
-    // Handle authentication and connection errors specially
-    if (error instanceof AuthenticationError) {
-      core.error(`${logPrefix} Authentication failed: ${error.message}`);
-      core.error(`${logPrefix} API Key: ${error.apiKey ? '***' : 'not provided'}`);
-      core.error(`${logPrefix} Host: ${error.host}`);
-      if (error.stack) {
-        core.debug(`${logPrefix} Stack trace: ${error.stack}`);
-      }
-      core.setFailed(`API key validation failed: ${error.message}`);
-    } else if (error instanceof ConnectionError) {
-      core.error(`${logPrefix} Connection failed: ${error.message}`);
-      core.error(`${logPrefix} Host: ${error.host}:${error.port}`);
-      if (error.originalError) {
-        core.error(`${logPrefix} Original error: ${error.originalError.message}`);
-        if (error.originalError.stack) {
-          core.debug(`${logPrefix} Original stack trace: ${error.originalError.stack}`);
-        }
-      }
-      if (error.stack) {
-        core.debug(`${logPrefix} Stack trace: ${error.stack}`);
-      }
-      core.setFailed(`Failed to connect to license server: ${error.message}`);
-    } else if (error instanceof Error) {
-      core.error(`${logPrefix} Unexpected error: ${error.message}`);
-      if (error.stack) {
-        core.debug(`${logPrefix} Stack trace: ${error.stack}`);
-      }
-      core.setFailed(error.message);
-    } else {
-      core.error(`${logPrefix} Unknown error: ${String(error)}`);
-      core.setFailed(String(error));
-    }
+/**
+ * Logs an error's stack trace at debug level, matching the pre-v2 `main.ts`
+ * behavior of surfacing stack traces without polluting the normal log output.
+ */
+function logStack(error: Error): void {
+  if (error.stack) {
+    core.debug(`${logPrefix} Stack trace: ${error.stack}`);
   }
 }
 
-run();
+/**
+ * Maps `@libum-llc/pipelines-core`'s typed errors onto `core.setFailed`,
+ * preserving the per-error-type messaging quality of the pre-v2 `main.ts`
+ * (host/port for connection failures, a masked API key, stack traces routed to
+ * `core.debug`).
+ *
+ * `AuthenticationError.apiKeyPrefix` is deliberately never printed - only
+ * whether it is present. It carries the first 8 characters of the API key, and
+ * `core.setSecret` masks whole registered values, not substrings of them, so
+ * emitting the prefix would leak it past the mask in a public repository's
+ * logs.
+ */
+function handleError(error: unknown): void {
+  if (error instanceof AuthenticationError) {
+    core.error(`${logPrefix} Authentication failed: ${error.message}`);
+    core.error(
+      `${logPrefix} API Key: ${error.apiKeyPrefix ? '***' : 'not provided'}`,
+    );
+    if (error.hostname) {
+      core.error(`${logPrefix} Host: ${error.hostname}`);
+    }
+    logStack(error);
+    core.setFailed(`API key validation failed: ${error.message}`);
+    return;
+  }
+
+  if (error instanceof ConnectionError) {
+    core.error(`${logPrefix} Connection failed: ${error.message}`);
+    if (error.hostname) {
+      core.error(
+        `${logPrefix} Host: ${error.hostname}${error.port ? `:${error.port}` : ''}`,
+      );
+    }
+    if (error.originalError) {
+      core.error(`${logPrefix} Original error: ${error.originalError.message}`);
+      if (error.originalError.stack) {
+        core.debug(
+          `${logPrefix} Original stack trace: ${error.originalError.stack}`,
+        );
+      }
+    }
+    logStack(error);
+    core.setFailed(`Failed to connect to license server: ${error.message}`);
+    return;
+  }
+
+  if (error instanceof InputError) {
+    core.error(
+      `${logPrefix} Invalid input${error.inputName ? ` '${error.inputName}'` : ''}: ${error.message}`,
+    );
+    logStack(error);
+    core.setFailed(error.message);
+    return;
+  }
+
+  if (error instanceof SymNumberError) {
+    core.error(`${logPrefix} ${error.message}`);
+    if (error.branchName) {
+      core.error(`${logPrefix} Branch: ${error.branchName}`);
+    }
+    logStack(error);
+    core.setFailed(error.message);
+    return;
+  }
+
+  if (error instanceof ValidationError) {
+    if (error.invalidFiles && error.invalidFiles.length > 0) {
+      core.error(
+        `${logPrefix} Validation failed for ${error.invalidFiles.length} file(s):`,
+      );
+      for (const file of error.invalidFiles) {
+        core.error(`${logPrefix} ${file.name}:`);
+        for (const line of file.errors.split('\n')) {
+          core.error(`${logPrefix}   ${line}`);
+        }
+      }
+    }
+    logStack(error);
+    core.setFailed(error.message);
+    return;
+  }
+
+  if (error instanceof ConfigError) {
+    core.error(`${logPrefix} Configuration error: ${error.message}`);
+    if (error.context && Object.keys(error.context).length > 0) {
+      core.error(`${logPrefix} Context: ${JSON.stringify(error.context)}`);
+    }
+    logStack(error);
+    core.setFailed(error.message);
+    return;
+  }
+
+  if (error instanceof PowerOnError) {
+    core.error(`${logPrefix} ${error.message}`);
+    if (error.context && Object.keys(error.context).length > 0) {
+      core.error(`${logPrefix} Context: ${JSON.stringify(error.context)}`);
+    }
+    logStack(error);
+    core.setFailed(error.message);
+    return;
+  }
+
+  if (error instanceof Error) {
+    core.error(`${logPrefix} Unexpected error: ${error.message}`);
+    logStack(error);
+    core.setFailed(error.message);
+    return;
+  }
+
+  core.error(`${logPrefix} Unknown error: ${String(error)}`);
+  core.setFailed(String(error));
+}
+
+export async function run(): Promise<void> {
+  // Mask sensitive inputs before any logging can occur. Guard against empty
+  // strings: core.setSecret('') registers an empty mask, which the runner
+  // warns about on every subsequent log line.
+  const apiKey = core.getInput('api-key');
+  const symitarUserPassword = core.getInput('symitar-user-password');
+  const sshPassword = core.getInput('ssh-password');
+  const githubToken = core.getInput('github-token');
+  if (apiKey) core.setSecret(apiKey);
+  if (symitarUserPassword) core.setSecret(symitarUserPassword);
+  if (sshPassword) core.setSecret(sshPassword);
+  if (githubToken) core.setSecret(githubToken);
+
+  core.info(`${logPrefix} Starting Symitar synchronization (v${version})`);
+
+  try {
+    const message = await runSynchronizeDirectoryTask(
+      createSynchronizeDependencies(),
+    );
+    core.info(`${logPrefix} ${message}`);
+  } catch (error) {
+    reportFailure(error);
+  }
+}
+
+/**
+ * Reports a failure, and cannot itself fail silently.
+ *
+ * Everything below the entry point resolves the exit code from
+ * `process.exitCode`, which `core.setFailed` is what sets. So anything that
+ * throws *before* `setFailed` runs leaves the exit code unset, and the step
+ * goes green on a genuine failure. `handleError` has two such paths - the
+ * `ConfigError` and `PowerOnError` branches both call
+ * `JSON.stringify(error.context)` before their `setFailed`, and `context` is a
+ * `Record<string, unknown>` populated by callers, so a circular or
+ * BigInt-bearing value throws. Rather than audit every reporting path for
+ * throw-safety forever, failure is recorded here even when reporting it is
+ * what broke.
+ *
+ * @param error The error to report
+ */
+function reportFailure(error: unknown): void {
+  try {
+    handleError(error);
+  } catch (reportingError) {
+    process.exitCode = 1;
+    core.setFailed(
+      `${logPrefix} Failed while reporting an error (${
+        reportingError instanceof Error
+          ? reportingError.message
+          : String(reportingError)
+      }). Original error: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+/**
+ * Resolves the exit code to terminate with.
+ *
+ * `core.setFailed` records failure by assigning `process.exitCode`, so honour
+ * whatever it set and default to success.
+ */
+export function resolveExitCode(
+  exitCode: number | string | null | undefined,
+): number {
+  return typeof exitCode === 'number' ? exitCode : 0;
+}
+
+// `run` is exported so tests can invoke it directly and assert on its
+// behavior; the module is only self-executing when it is the actual Action
+// entry point (`node dist/index.js`), not when imported by a test.
+//
+// The explicit `process.exit` is load-bearing, not defensive. The Symitar
+// client can leave a handle on the event loop that outlives the connection
+// teardown, so once the task resolves Node has no reason to exit and the step
+// hangs until the job timeout — observed live as a 14-minute hang *after* the
+// success line had already been logged, with the step then reported as a
+// failure despite the synchronization having succeeded. poweron-pipelines does
+// the same thing at the end of `executeTask` (task-orchestration.ts:
+// `process.exit(0)` / `process.exit(1)`); that call was dropped here along
+// with the rest of the Azure-specific wrapper, taking the process teardown
+// with it.
+/* istanbul ignore next */
+if (require.main === module) {
+  void run()
+    .catch((error: unknown) => {
+      // `run` catches its own failures, so reaching here means the reporting
+      // path itself threw. Never let that resolve to a green step.
+      process.exitCode = 1;
+      core.setFailed(
+        `${logPrefix} Unhandled error: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    })
+    .finally(() => {
+      exitWhenFlushed(resolveExitCode(process.exitCode));
+    });
+}
