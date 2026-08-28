@@ -154,8 +154,25 @@ which therefore have to be restored here:
   to `GITHUB_REF_NAME` would name the branch the *workflow* ran from, not the
   one `actions/checkout` put in the workspace, and would turn a working v1
   config (dispatch from `main`, check out `develop`) into a hard failure whose
-  advice is backwards. `pull-request-target-branch` *does* fall back to
-  `GITHUB_REF_NAME`, because core's `getRequiredPrValue` throws on an empty base
+  advice is backwards. `pull-request-target-branch` *does* fall back — to
+  `buildBranchName`, because core's `getRequiredPrValue` throws on an empty
+  base — but **only when the build ref is genuinely a branch**. On a
+  `pull_request` trigger `GITHUB_REF` is `refs/pull/42/merge` and on a tag
+  build it is the tag; either would name a base `pulls.create` cannot target,
+  so a `create-pull-request` run that cannot resolve one is refused at load
+  time rather than failing on a raw GitHub 422 after the pull has already
+  mutated the workspace
+- **`symitar-app-port` is required at load time when `connection-type` is
+  `https`.** Not left to `createHTTPsClient`: core reaches that factory only
+  after `validateApiKey` *and* after `await createSshClient(config)` has opened
+  a session on the production host, and the matching `end()` lives in the
+  transaction cleanup that the throw never reaches — so the connection leaked.
+  v1 rejected the combination during input validation; this restores it
+- **`sym-number` is a whole number 0-999.** `isValidNumber` is only a
+  `typeof`/`NaN` check, so `-627`, `627.5` and `1e6` otherwise reach the
+  Symitar client as the sym to synchronize. Deliberately tighter than the
+  `0-9999` v1 allowed, because a sym number is three digits.
+  `validate-poweron-action` bounds it identically; keep the two in step
 - `local-directory-path` is deliberately **not** normalized or folded into
   `repoConfig.inputs`. Core's runner passes the raw input to
   `getLocalDirectoryPath`, which prefers it over `configPaths` whenever it is
@@ -315,6 +332,22 @@ Two related traps in reading that workflow's assertions:
 
 Mutating coverage belongs in `poweron-pipelines`' own live suite, which owns
 run-scoped fixtures and recovery scripts.
+
+### Where documentation goes
+
+`README.md` documents **how to use the action** — inputs, outputs, examples,
+behaviours a consumer needs at the point of writing a workflow. It carries no
+upgrade notes, no breaking-change list and no v1-to-v2 comparison, not even a
+pointer to one. That was an explicit owner decision.
+
+`CHANGELOG.md` carries a version's changes: what broke, what is new, and — just
+as important — an **Explicitly unchanged** section recording behaviour that was
+altered during development and reverted, so nobody reintroduces it. The
+`connection-type` default and the list-input parser are both in there for that
+reason.
+
+This file is for whoever is changing the code. Keep it in step: several
+entries below record a trap that has already been hit once.
 
 ### Registry auth
 
