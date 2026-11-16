@@ -8,7 +8,6 @@
 - Make dry runs read-only, add optional dependent PowerOn reinstalls and `files-reinstalled`, and support exclusions in preservation patterns; preserved-only pulls with no patterns download nothing.
 - Preserve existing input names, list parsing, GitHub step outputs, and branch/PR handling. Live checks use one connector and require manual dispatch.
 
-Publication is pending the shared core package and final lockfile/bundle verification.
 
 
 ## v2.0.0
