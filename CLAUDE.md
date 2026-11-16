@@ -5,8 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 GitHub Action to synchronize directories (PowerOns, LetterFiles, DataFiles,
-HelpFiles) on the Jack Henry Symitar credit union core platform. Supports both
-SSH and HTTPS connections with push, pull, and mirror sync modes. File transfers
+HelpFiles) on the Jack Henry Symitar credit union core platform. Uses the Symitar connector over SSH in v2.2 with push, pull, and mirror sync modes. File transfers
 can use SFTP (with configurable concurrency) or rsync.
 
 ## Build Commands
@@ -68,10 +67,8 @@ surface resolve. (One test reads a file under core's `dist/` as *text* to check
 this repo's output mapping against what core actually publishes — that is not an
 import, and it is commented as such.)
 
-Note that importing the package applies core's module-scope
-`https.globalAgent.options.rejectUnauthorized = false`. That is a deliberate,
-documented owner decision in core (Symitar hosts commonly present certificates
-that fail default verification), not something to work around here.
+Core v2.0 owns the Symitar connector, currently using SSH. Do not restore
+legacy HTTPs/SSH client factories or global TLS verification bypasses.
 
 ### `src/lib/github-task-host.ts` — the `TaskHost` adapter
 
@@ -142,7 +139,7 @@ from `.poweron-pipelines/config.yml`. Also home to the validations the Azure
 extension gets from its `task.json` pick lists and its zod config schema, and
 which therefore have to be restored here:
 
-- `connectionType`, `syncMode` and `syncMethod` value checks
+- `syncMode` and `syncMethod` value checks; legacy `connectionType` is ignored in v2.2
 - hostname and port format checks, and the `sftp-concurrency` 1-20 range
 - `dry-run` is read as a **required** boolean, so an explicitly empty value
   fails the run rather than silently defaulting to a live mutation
@@ -162,12 +159,8 @@ which therefore have to be restored here:
   so a `create-pull-request` run that cannot resolve one is refused at load
   time rather than failing on a raw GitHub 422 after the pull has already
   mutated the workspace
-- **`symitar-app-port` is required at load time when `connection-type` is
-  `https`.** Not left to `createHTTPsClient`: core reaches that factory only
-  after `validateApiKey` *and* after `await createSshClient(config)` has opened
-  a session on the production host, and the matching `end()` lives in the
-  transaction cleanup that the throw never reaches — so the connection leaked.
-  v1 rejected the combination during input validation; this restores it
+- `connection-type` and `symitar-app-port` are accepted but ignored in v2.2. Do not read or validate them. Future protocol selection needs an explicit opt-in contract.
+- Both SSH and Symitar credentials are required. `ssh-host-key` is passed to core; otherwise the agent account needs known_hosts.
 - **`sym-number` is a whole number 0-999.** `isValidNumber` is only a
   `typeof`/`NaN` check, so `-627`, `627.5` and `1e6` otherwise reach the
   Symitar client as the sym to synchronize. Deliberately tighter than the
@@ -381,8 +374,7 @@ the token.
 
 - `@libum-llc/pipelines-core` — the shared, host-agnostic task runner and
   supporting modules
-- `@libum-llc/symitar` — proprietary Symitar client (`SymitarHTTPs`,
-  `SymitarSSH`). Core pins this to an **exact** version; keep this repo's
+- `@libum-llc/symitar` — proprietary Symitar client (the new Symitar connector). Core pins this to an **exact** version; keep this repo's
   version identical to core's, or the tree gets two copies and `instanceof`
   checks across them break silently.
 - `@actions/core` — GitHub Actions toolkit, reached through

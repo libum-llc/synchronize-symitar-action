@@ -1,8 +1,6 @@
 import * as childProcess from 'child_process';
 import { tmpdir } from 'os';
 
-import { SymitarHTTPs, SymitarSSH } from '@libum-llc/symitar';
-
 import {
   ConfigError,
   getDirectoryConfig,
@@ -13,27 +11,8 @@ import {
 
 import { createGitHubTaskHost } from '../github-task-host';
 
-import {
-  createHTTPsClient,
-  createSSHClient,
-  loadSynchronizeConfig,
-  type SynchronizeActionConfig,
-} from '../task-orchestration';
+import { loadSynchronizeConfig } from '../task-orchestration';
 
-// Only the Symitar client constructors are stubbed, and the factory spreads
-// `requireActual` on purpose: core imports `@libum-llc/symitar` itself for the
-// sync-mode enums, so a bare factory mock would replace the very classes under
-// test and make the suite vacuous rather than failing.
-// `@libum-llc/pipelines-core` is not mocked at all - this module uses its real
-// error hierarchy and directory config, which is what these assertions
-// dispatch on.
-jest.mock('@libum-llc/symitar', () => ({
-  ...jest.requireActual('@libum-llc/symitar'),
-  SymitarHTTPs: jest.fn(),
-  SymitarSSH: jest
-    .fn()
-    .mockImplementation(() => ({ isReady: Promise.resolve() })),
-}));
 // Only `execFileSync`, which the commit-branch guard shells out through.
 // `jest.spyOn` cannot be used here: Node marks `child_process`'s exports
 // non-configurable, so redefining one throws.
@@ -41,9 +20,6 @@ jest.mock('child_process', () => ({
   ...jest.requireActual('child_process'),
   execFileSync: jest.fn(),
 }));
-
-const symitarSSHMock = SymitarSSH as unknown as jest.Mock;
-const symitarHTTPsMock = SymitarHTTPs as unknown as jest.Mock;
 
 const WORKSPACE = '/home/runner/work/repo/repo';
 
@@ -102,6 +78,12 @@ describe('task-orchestration', () => {
   });
 
   describe('loadSynchronizeConfig', () => {
+    it('keeps dependent reinstalls opt-in and reads the declared action input', () => {
+      expect(loadSynchronizeConfig().reinstallDependentPowerOns).toBe(false);
+      setActionInputs({ 'reinstall-dependent-powerons': 'true' });
+      expect(loadSynchronizeConfig().reinstallDependentPowerOns).toBe(true);
+    });
+
     it('should load synchronize configuration from action inputs', () => {
       const config = loadSynchronizeConfig();
 
@@ -578,75 +560,31 @@ describe('task-orchestration', () => {
         );
       });
     });
-
-    // `action.yml` cannot express the two-option `pickList` that constrains
-    // this input in the Azure extension's `task.json`, and core's runner treats
-    // it as `'https' | 'ssh'`, branching `=== 'https' ? HTTPS : SSH`. Without
-    // this validation a typo runs the SSH path silently against an
-    // HTTPS-configured job.
-    describe('connectionType', () => {
-      it('should accept an unset input (action.yml defaults it to ssh)', () => {
-        expect(() => loadSynchronizeConfig()).not.toThrow();
+    describe('v2.2 connection compatibility', () => {
+      it.each(['', 'ssh', 'https', 'HTTPS', 'future-protocol'])(
+        'ignores selector %s and any application port',
+        (selector) => {
+          setActionInputs({
+            'connection-type': selector,
+            'symitar-app-port': 'not-a-port',
+          });
+          const config = loadSynchronizeConfig();
+          expect(config.symitarAppPort).toBeUndefined();
+          expect(config.sshPort).toBe(22);
+        },
+      );
+      it('accepts an approved host key unchanged', () => {
+        setActionInputs({ 'ssh-host-key': 'approved-key' });
+        expect(loadSynchronizeConfig().sshHostKey).toBe('approved-key');
       });
-
-      it.each([['https'], ['ssh']])('should accept %s', (connectionType) => {
-        setActionInputs({
-          'connection-type': connectionType,
-          // https requires the app port up front; ssh ignores it.
-          'symitar-app-port': '42627',
-        });
-
-        expect(() => loadSynchronizeConfig()).not.toThrow();
-      });
-
-      // v1 rejected this during input validation. v2 had deferred it to
-      // createHTTPsClient, which core only reaches after validateApiKey and
-      // after createSshClient has opened a session on the production host -
-      // and the matching end() lives in cleanup that the throw never reaches,
-      // so the connection leaked.
-      it('should require symitar-app-port before contacting Symitar on https', () => {
-        setActionInputs({ 'connection-type': 'https' });
-
+      it.each([
+        'ssh-username',
+        'ssh-password',
+        'symitar-user-number',
+        'symitar-user-password',
+      ])('rejects blank %s before connecting', (name) => {
+        setActionInputs({ [name]: '   ' });
         expect(() => loadSynchronizeConfig()).toThrow(InputError);
-        expect(() => loadSynchronizeConfig()).toThrow(
-          /'symitar-app-port' input is required when 'connection-type' is 'https'/,
-        );
-        expect(() => loadSynchronizeConfig()).toThrow(
-          expect.objectContaining({ inputName: 'symitarAppPort' }),
-        );
-      });
-
-      it('should not require symitar-app-port on ssh', () => {
-        setActionInputs({ 'connection-type': 'ssh' });
-
-        expect(() => loadSynchronizeConfig()).not.toThrow();
-      });
-
-      it('should throw InputError naming the valid values for a typo', () => {
-        setActionInputs({ 'connection-type': 'htpps' });
-
-        expect(() => loadSynchronizeConfig()).toThrow(InputError);
-        expect(() => loadSynchronizeConfig()).toThrow(
-          /Invalid connection type: 'htpps'\. Must be 'https' or 'ssh'/,
-        );
-      });
-
-      it('should name the connectionType input on the thrown error', () => {
-        setActionInputs({ 'connection-type': 'HTTPS' });
-
-        expect(() => loadSynchronizeConfig()).toThrow(
-          expect.objectContaining({ inputName: 'connectionType' }),
-        );
-      });
-
-      // Core's runner calls SSH-only APIs in both branches
-      it('should require the ssh credentials even for an https connection', () => {
-        setActionInputs({ 'connection-type': 'https' });
-        delete process.env['INPUT_SSH-PASSWORD'];
-
-        expect(() => loadSynchronizeConfig()).toThrow(
-          'Input required and not supplied: ssh-password',
-        );
       });
     });
 
@@ -669,24 +607,6 @@ describe('task-orchestration', () => {
           expect(() => loadSynchronizeConfig()).toThrow(InputError);
         },
       );
-    });
-
-    describe('symitarAppPort', () => {
-      it('should parse the symitar-app-port input', () => {
-        setActionInputs({ 'symitar-app-port': '42627' });
-
-        expect(loadSynchronizeConfig().symitarAppPort).toBe(42627);
-      });
-
-      it('should be undefined when not provided', () => {
-        expect(loadSynchronizeConfig().symitarAppPort).toBeUndefined();
-      });
-
-      it('should throw InputError for an out-of-range port', () => {
-        setActionInputs({ 'symitar-app-port': '99999' });
-
-        expect(() => loadSynchronizeConfig()).toThrow(InputError);
-      });
     });
 
     describe('commit inputs', () => {
@@ -1043,102 +963,6 @@ describe('task-orchestration', () => {
         expect(config.buildBranch).toBe('');
         expect(config.buildBranchName).toBe('');
       });
-    });
-  });
-
-  describe('createSSHClient', () => {
-    it('should construct a SymitarSSH client from the config', async () => {
-      const config = loadSynchronizeConfig();
-
-      await createSSHClient(config);
-
-      expect(symitarSSHMock).toHaveBeenCalledTimes(1);
-      expect(symitarSSHMock).toHaveBeenCalledWith(
-        {
-          host: 'symitar.example.com',
-          port: 22,
-          username: 'testuser',
-          password: 'testpass',
-        },
-        'info',
-      );
-    });
-
-    it('should use the debug log level when debug is enabled', async () => {
-      setActionInputs({ debug: 'true' });
-
-      await createSSHClient(loadSynchronizeConfig());
-
-      expect(symitarSSHMock).toHaveBeenCalledWith(expect.anything(), 'debug');
-    });
-  });
-
-  describe('createHTTPsClient', () => {
-    const loadHTTPsConfig = (): SynchronizeActionConfig => {
-      setActionInputs({
-        'connection-type': 'https',
-        'symitar-app-port': '42627',
-      });
-      return loadSynchronizeConfig();
-    };
-
-    it('should throw InputError when symitarAppPort is missing', () => {
-      const config = loadSynchronizeConfig();
-
-      expect(() => createHTTPsClient(config)).toThrow(InputError);
-      expect(() => createHTTPsClient(config)).toThrow(
-        'symitarAppPort is required when using HTTPS connection',
-      );
-    });
-
-    // Core's runner always builds the SSH client first and hands it to the
-    // HTTPS client, because it goes on to call SSH-only APIs
-    // (getFileModificationTime, createInstallWorker, createUninstallWorker) on
-    // that same instance.
-    it('should attach the SSH client the runner constructs', async () => {
-      const config = loadHTTPsConfig();
-
-      const sshClient = await createSSHClient(config);
-      createHTTPsClient(config, sshClient);
-
-      expect(symitarSSHMock).toHaveBeenCalledTimes(1);
-      expect(symitarHTTPsMock).toHaveBeenCalledWith(
-        'https://symitar.example.com:42627',
-        {
-          symNumber: 627,
-          symitarUserNumber: '1234',
-          symitarUserPassword: 'userpass',
-        },
-        'info',
-        { port: 22, username: 'testuser', password: 'testpass' },
-        { sshClient },
-      );
-    });
-
-    it('should pass no sshClient option when none is supplied', () => {
-      createHTTPsClient(loadHTTPsConfig());
-
-      expect(symitarHTTPsMock).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.any(Object),
-        'info',
-        expect.any(Object),
-        undefined,
-      );
-    });
-
-    it('should pass the debug log level through to the HTTPS client', () => {
-      setActionInputs({ debug: 'true' });
-
-      createHTTPsClient(loadHTTPsConfig());
-
-      expect(symitarHTTPsMock).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.any(Object),
-        'debug',
-        expect.any(Object),
-        undefined,
-      );
     });
   });
 });

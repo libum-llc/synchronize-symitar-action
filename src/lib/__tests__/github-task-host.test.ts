@@ -36,6 +36,7 @@ const CORE_OUTPUT_MAPPING: Array<[coreName: string, actionName: string]> = [
   ['filesDeployed', 'files-deployed'],
   ['filesDeleted', 'files-deleted'],
   ['filesInstalled', 'files-installed'],
+  ['filesReinstalled', 'files-reinstalled'],
   ['filesUninstalled', 'files-uninstalled'],
   ['outliersCount', 'outliers-count'],
   ['outlierFiles', 'outlier-files'],

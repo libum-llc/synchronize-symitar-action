@@ -1,15 +1,12 @@
 import {
+  createQuestClient,
   validateApiKey,
   type SynchronizeDirectoryTaskDependencies,
 } from '@libum-llc/pipelines-core';
 
 import { createGitHubPullRequestPublisher } from '../lib/github-pull-request';
 import { createGitHubTaskHost } from '../lib/github-task-host';
-import {
-  createHTTPsClient,
-  createSSHClient,
-  loadSynchronizeConfig,
-} from '../lib/task-orchestration';
+import { loadSynchronizeConfig } from '../lib/task-orchestration';
 
 /**
  * Builds the production dependencies for `@libum-llc/pipelines-core`'s
@@ -39,8 +36,7 @@ export function createSynchronizeDependencies(): SynchronizeDirectoryTaskDepende
     task: createGitHubTaskHost(),
     loadConfig: () => config,
     validateApiKey,
-    createHttpsClient: createHTTPsClient,
-    createSshClient: createSSHClient,
+    createQuestClient,
     pullRequestPublisher: createGitHubPullRequestPublisher(config.githubToken),
   };
 }
