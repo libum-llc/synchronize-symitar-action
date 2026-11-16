@@ -69,7 +69,7 @@ inputs:
     required: false
     default: ''
   pull-preserved-only:
-    description: 'When sync-mode is pull, only pull files matched by preserve-server-files. If no preserve-server-files are configured, this is a no-op.'
+    description: 'When sync-mode is pull, only pull files matched by preserve-server-files. If no preserve-server-files are configured, no files are pulled.'
     required: false
     default: 'false'
   commit-pulled-changes:

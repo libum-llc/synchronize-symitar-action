@@ -156,7 +156,7 @@ jobs:
 
 ### Pulling Preserved Files Back to Git
 
-Use `pull-preserved-only` to download only files matched by `preserve-server-files`. Enable `commit-pulled-changes` when the action should commit and push those changes.
+Use `pull-preserved-only` to download only files matched by `preserve-server-files`. With no preservation patterns, a preserved-only pull downloads nothing. Enable `commit-pulled-changes` when the action should commit and push those changes.
 
 ```yaml
 on:
@@ -427,7 +427,7 @@ Synchronization compares and verifies original bytes, including same-size edits 
 
 SFTP is the default. For `sync-method: rsync`, install `rsync` and `sshpass`; Windows also requires working WSL with Bash and `setsid`. `setsid` lets cancellation stop the transfer's process group before recovery. Dry runs use SFTP planning and do not test rsync execution.
 
-Set `reinstall-dependent-powerons: true` to reinstall listed, already-installed parent PowerOns when a direct or nested include changes. Include complete source/include trees in the artifact. Dry runs explicitly name proposed parent reinstalls. The option defaults to `false`; `files-reinstalled` is a subset of `files-installed`, and both counts stay zero during dry runs.
+Set `reinstall-dependent-powerons: true` to install or reinstall listed parent PowerOns when a direct or nested include changes. Include complete source/include trees in the artifact. Dry runs explicitly name proposed parent reinstalls. The option defaults to `false`; `files-reinstalled` is a subset of `files-installed`, and dry-run counts describe planned actions, not completed installations.
 
 ### Outputs
 

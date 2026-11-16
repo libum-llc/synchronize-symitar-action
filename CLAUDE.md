@@ -293,59 +293,21 @@ what consumers run, and they never run `pnpm install`. Two consequences:
 
 ### Live integration
 
-`.github/workflows/live-integration.yml` runs the committed bundle against SYM
-627 on a self-hosted runner. Two properties are load-bearing and must not be
-relaxed:
+`.github/workflows/live-integration.yml` is manual-only and makes one action
+attempt against a dedicated HELPFILE fixture in dry-run mode. Never restore
+push/PR triggers, connector matrices, invalid-credential scenarios or automatic
+login retries. Explicit host trust and credential presence are checked before
+connecting. A failed live check must be reviewed before another is dispatched.
+The concurrency group is repository-scoped; coordinate other repositories on
+the shared runner before dispatching.
 
-- **The fork guard** in the job's `if:`. This is a public repo; a job-level
-  `if:` is evaluated before a runner is assigned, so a fork's pull request never
-  reaches the runner. Never switch the trigger to `pull_request_target`.
-- **Every scenario pairs `dry-run: true` with a non-PowerOn `directory-type`.**
-  Both halves are required, and the second is the one that is easy to lose.
-
-#### `dry-run: true` does NOT make a `powerOns` run read-only
-
-This is the single most important thing to know before editing that workflow.
-**PowerOn validation is not dry-run gated.** In `@libum-llc/symitar@1.12.0`,
-`dist/shared/sync-orchestrator.js:169-171`:
-
-```js
-shouldValidate = hasPowerOnOptions
-              && syncMode !== SymitarSyncMode.PULL
-              && !options.powerOn?.skipValidation;
-```
-
-There is no `isDryRun` term, and the block runs at line 195 — *before*
-`operations.executeSync` at line 215, which is where the dry-run short-circuit
-actually lives (`clients/ssh/ssh.synchronize.js:10`,
-`clients/https/https.synchronize.js:13`; both clients share this orchestrator).
-Validation writes to the host: `clients/ssh/ssh.validate.js` sftp-writes each
-changed PowerOn into REPWRITERSPECS under a temporary name with mode 0770,
-chmods and chgrps it, compiles it, then unlinks it — so a run that dies between
-the write and the unlink leaves a temp file on a live Sym.
-
-`hasPowerOnOptions` is `options.powerOn && remoteDirectory === REPWRITERSPECS`.
-Core always sets `options.powerOn`, so the **directory type is the only
-discriminator**, and every current scenario uses `helpFiles` → `HELPFILES`.
-
-To add a `powerOns` scenario, one of these must hold: `sync-mode: pull`
-(validation is skipped for PULL), `skip-validation: 'true'`, or an explicit,
-reviewed decision to accept host writes from a pull-request-triggered workflow.
-`src/lib/__tests__/live-integration-workflow.test.ts` enforces exactly that
-disjunction in CI, so this cannot regress silently.
-
-Two related traps in reading that workflow's assertions:
-
-- `outliers-count`, `files-installed` and `files-uninstalled` are **structurally
-  zero** under dry run — outliers are populated only inside the SFTP transport,
-  which dry-run short-circuits before reaching, and install/uninstall are gated
-  on `!isDryRun`. Asserting `0` there proves the output plumbing works, not that
-  no drift exists.
-- `sync-method: rsync` is never exercised live, because `executeSyncTransport`
-  returns a synthetic result before choosing a transport.
-
-Mutating coverage belongs in `poweron-pipelines`' own live suite, which owns
-run-scoped fixtures and recovery scripts.
+In v2.2, dry runs skip validation, transfers, lifecycle mutations, commits and
+PR creation. They still connect and read remote state. Counts describe planned
+changes; a PowerOn dry run can report planned installations/reinstalls without
+performing them. Dry runs use SFTP planning and do not verify actual rsync.
+Mutating integration coverage belongs in `poweron-pipelines`, which owns named
+fixtures, byte verification and recovery. Do not duplicate host calls merely
+to check compatibility input values; that belongs in offline tests.
 
 ### Where documentation goes
 
