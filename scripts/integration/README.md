@@ -15,7 +15,9 @@ alone do not serialize different repositories.
 In the `symitar-integration` environment, configure:
 
 - Secrets: `SYMITAR_PASSWORD` and `SYMITAR_USER_PASSWORD` (valid test credentials).
-- Variable: `POWERON_PIPELINES_ORG_ID`.
+- Environment secrets: `SYMITAR_HOSTNAME`, `SYMITAR_SSH_USERNAME`,
+  `SYMITAR_SYM_NUMBER`, `SYMITAR_USER_NUMBER`, and `POWERON_PIPELINES_ORG_ID`.
+  Keep test infrastructure identifiers out of public source and logs.
 - Approved trust: `SYMITAR_SSH_HOST_KEY`, or the host's approved key already in
   the runner service account's `~/.ssh/known_hosts`. Never automatically accept
   an unknown key. Preflight performs no login.
@@ -42,7 +44,7 @@ is a safety ceiling, not a performance target. Failures stop further host calls.
   before the test. No mirror or unrelated-file deletion is permitted.
 
 The fixture verifier installs the exact locked core and SDK using the existing
-`NGUYENDON_GITHUB_TOKEN` package/source-read secret. The Action still runs its
+configured package/source-read secret. The Action still runs its
 committed bundle. The verifier uses the same Symitar connector; there are no
 legacy SSH/HTTPS client factories.
 

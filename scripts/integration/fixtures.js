@@ -19,6 +19,26 @@ function content() {
     Buffer.from([0, 128, 255, 13, 10, 26]),
   ]);
 }
+function targetConfiguration() {
+  const values = [
+    'LIVE_HOSTNAME',
+    'LIVE_SSH_USERNAME',
+    'LIVE_SYM_NUMBER',
+    'LIVE_SYM_USER_NUMBER',
+  ].map((key) => {
+    const value = process.env[key]?.trim();
+    assert.ok(value, `Missing ${key}; no live connection attempted.`);
+    return value;
+  });
+  assert.match(values[2], /^\d{1,3}$/);
+  return {
+    host: values[0],
+    username: values[1],
+    sym: Number(values[2]),
+    user: values[3],
+    fingerprint: hash(Buffer.from(JSON.stringify(values))),
+  };
+}
 function prepare() {
   const name = fixtureName(
     process.env.GITHUB_RUN_ID,
@@ -36,7 +56,8 @@ function prepare() {
       {
         name,
         sha256: hash(bytes),
-        target: 'SYM627/HELPFILES',
+        target: 'HELPFILES',
+        configuration: targetConfiguration().fingerprint,
         state: 'unverified',
       },
       null,
@@ -51,7 +72,12 @@ function readJournal() {
     data.name,
     fixtureName(process.env.GITHUB_RUN_ID, process.env.GITHUB_RUN_ATTEMPT),
   );
-  assert.equal(data.target, 'SYM627/HELPFILES');
+  assert.equal(data.target, 'HELPFILES');
+  assert.equal(
+    data.configuration,
+    targetConfiguration().fingerprint,
+    'Fixture target configuration changed',
+  );
   assert.equal(data.sha256, hash(content()));
   return data;
 }
@@ -116,12 +142,13 @@ async function main() {
   assert.ok(['check-absent', 'cleanup'].includes(mode));
   readJournal(); // All ownership checks precede authentication.
   const { createQuestClient } = require('@libum-llc/pipelines-core');
+  const target = targetConfiguration();
   const client = await createQuestClient({
-    symitarHostname: '74.200.48.18',
+    symitarHostname: target.host,
     sshPort: 22,
-    sshUsername: 'libum627',
-    symNumber: 627,
-    symitarUserNumber: '1999',
+    sshUsername: target.username,
+    symNumber: target.sym,
+    symitarUserNumber: target.user,
     debug: false,
     sshPassword: process.env.AIX_PASSWORD,
     symitarUserPassword: process.env.SYM_PASSWORD,

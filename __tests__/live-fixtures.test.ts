@@ -10,6 +10,10 @@ describe('run-owned live synchronization fixture safeguards', () => {
   beforeEach(() => {
     workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'action-fixture-test-'));
     process.chdir(workspace);
+    process.env.LIVE_HOSTNAME = 'symitar.example';
+    process.env.LIVE_SSH_USERNAME = 'fixture-user';
+    process.env.LIVE_SYM_NUMBER = '123';
+    process.env.LIVE_SYM_USER_NUMBER = '100';
     process.env.GITHUB_RUN_ID = '123';
     process.env.GITHUB_RUN_ATTEMPT = '1';
     process.env.GITHUB_OUTPUT = path.join(workspace, 'output');
@@ -64,6 +68,15 @@ describe('run-owned live synchronization fixture safeguards', () => {
     const c = client();
     await expect(fixture.control('cleanup', c)).rejects.toThrow();
     expect(c.listFiles).not.toHaveBeenCalled();
+  });
+  it('refuses cleanup when the configured target changes', async () => {
+    process.env.LIVE_HOSTNAME = 'different.example';
+    const c = client();
+    await expect(fixture.control('cleanup', c)).rejects.toThrow(
+      'Fixture target configuration changed',
+    );
+    expect(c.listFiles).not.toHaveBeenCalled();
+    expect(c.removeFile).not.toHaveBeenCalled();
   });
   it('detects line-ending or binary-byte normalization and dry-run writes', () => {
     const target = '.integration-fixtures/pull/GHS_123_1_BYTES';
