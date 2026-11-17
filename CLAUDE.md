@@ -293,21 +293,25 @@ what consumers run, and they never run `pnpm install`. Two consequences:
 
 ### Live integration
 
-`.github/workflows/live-integration.yml` is manual-only and makes one action
-attempt against a dedicated HELPFILE fixture in dry-run mode. Never restore
-push/PR triggers, connector matrices, invalid-credential scenarios or automatic
-login retries. Explicit host trust and credential presence are checked before
-connecting. A failed live check must be reviewed before another is dispatched.
-The concurrency group is repository-scoped; coordinate other repositories on
-the shared runner before dispatching.
+`.github/workflows/live-integration.yml` runs on trusted branch pushes and
+manual dispatch. It tests the committed Action bundle through the Symitar
+connector; legacy selector and credential-rejection cases stay offline.
+Licensing alone is simulated with the configured organization ID. No real API
+key is needed. Approved host trust is required through SYMITAR_SSH_HOST_KEY or
+the runner account's known_hosts. Scenarios run sequentially and stop on an
+unexpected failure. Do not rerun failed jobs: inspect the failure before a new
+dispatch. The concurrency group is repository-scoped, so use a single shared
+runner or coordinate execution across repositories. The workflow summary and
+symitar-live-evidence artifact record per-scenario durations.
 
 In v2.2, dry runs skip validation, transfers, lifecycle mutations, commits and
 PR creation. They still connect and read remote state. Counts describe planned
 changes; a PowerOn dry run can report planned installations/reinstalls without
 performing them. Dry runs use SFTP planning and do not verify actual rsync.
-Mutating integration coverage belongs in `poweron-pipelines`, which owns named
-fixtures, byte verification and recovery. Do not duplicate host calls merely
-to check compatibility input values; that belongs in offline tests.
+This Action also verifies one run-owned HELPFILE push/pull round trip and exact
+remote bytes before targeted cleanup. The larger rollback and lifecycle matrix
+stays in `poweron-pipelines`. See `scripts/integration/README.md` for recovery
+rules. Compatibility input values are tested offline, without extra host calls.
 
 ### Where documentation goes
 

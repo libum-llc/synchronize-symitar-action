@@ -1,31 +1,53 @@
 name: live-integration
 
-# One reviewed connection per run. Compatibility selectors and failures are
-# tested offline. Do not restore automatic push/PR triggers or login retries.
-# This lock is repository-scoped: serialize with other Symitar suites at the
-# shared runner/operator level before dispatching.
+# Trusted branch pushes attach live evidence to the PR. Never run untrusted
+# fork code with host credentials. One connector, sequential cases, no retries.
 on:
+  push:
+    branches-ignore: [main, 'dependabot/**']
+    paths:
+      - 'src/**'
+      - 'dist/**'
+      - 'action.yml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'scripts/integration/**'
+      - '.github/workflows/live-integration*'
+      - '.github/workflows/live-integration-fixtures/**'
   workflow_dispatch:
-
-concurrency:
-  group: symitar-live-integration
-  cancel-in-progress: false
 
 permissions:
   contents: read
 
+# This lock is repository-scoped. Use the same single runner across the live
+# suites; do not concurrently dispatch against the same Symitar console.
+concurrency:
+  group: symitar-live-integration
+  cancel-in-progress: false
+
 jobs:
   symitar:
-    name: Symitar Connector Live Check
+    name: Symitar Connector Live Integration
+    if: github.actor != 'dependabot[bot]' && github.run_attempt == 1
     environment: symitar-integration
     runs-on:
       group: Symitar
-    timeout-minutes: 5
+      labels: self-hosted
+    timeout-minutes: 15
+    env:
+      POWERON_PIPELINES_ORG_ID: ${{ vars.POWERON_PIPELINES_ORG_ID }}
     steps:
-      - name: Checkout
+      - name: Checkout committed Action bundle
+        id: checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
 
       - name: Check required configuration without connecting
         shell: bash
@@ -33,18 +55,62 @@ jobs:
           HOST_KEY: ${{ vars.SYMITAR_SSH_HOST_KEY }}
           AIX_PASSWORD: ${{ secrets.SYMITAR_PASSWORD }}
           SYM_PASSWORD: ${{ secrets.SYMITAR_USER_PASSWORD }}
-          API_KEY: ${{ secrets.POWERON_PIPELINES_API_KEY }}
-        run: |
-          for name in HOST_KEY AIX_PASSWORD SYM_PASSWORD API_KEY; do
-            if [ -z "${!name}" ]; then
-              echo "::error::Missing $name; no live connection attempted."
-              exit 1
-            fi
-          done
+        run: node scripts/integration/preflight.js
 
-      - name: Preview known-absent HELPFILE once
-        id: live
+      # Only the fixture verifier needs dependencies. Never rebuild dist here:
+      # every uses: ./ below runs the bundle that customers receive.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v3
+
+      - name: Configure registry
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://npm.pkg.github.com
+          scope: '@libum-llc'
+
+      - name: Install fixture verifier dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NGUYENDON_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.NGUYENDON_GITHUB_TOKEN }}
+          GIT_CONFIG_COUNT: '1'
+          GIT_CONFIG_KEY_0: credential.https://github.com.helper
+          GIT_CONFIG_VALUE_0: '!gh auth git-credential'
+          GIT_TERMINAL_PROMPT: '0'
+          GIT_SSH_COMMAND: 'false'
+
+      - name: Prepare one run-owned binary HELPFILE and recovery journal
+        id: fixtures
+        run: node scripts/integration/fixtures.js prepare
+
+      - name: Start timing for absence
+        id: start_absence
+        run: node scripts/integration/report.js clock
+
+      - name: Prove the run-owned remote filename is absent
+        id: absence
+        timeout-minutes: 2
+        env:
+          HOST_KEY: ${{ vars.SYMITAR_SSH_HOST_KEY }}
+          AIX_PASSWORD: ${{ secrets.SYMITAR_PASSWORD }}
+          SYM_PASSWORD: ${{ secrets.SYMITAR_USER_PASSWORD }}
+        run: node scripts/integration/fixtures.js check-absent
+
+      - name: End timing for absence
+        id: end_absence
+        run: node scripts/integration/report.js clock
+
+      - name: Start timing for preview
+        id: start_preview
+        run: node scripts/integration/report.js clock
+
+      - name: Preview one absent HELPFILE
+        id: preview
+        timeout-minutes: 3
         uses: ./
+        env:
+          NODE_OPTIONS: --require "${{ github.workspace }}/scripts/integration/preload-license.js"
         with:
           symitar-hostname: '74.200.48.18'
           sym-number: '627'
@@ -53,19 +119,271 @@ jobs:
           ssh-username: 'libum627'
           ssh-password: ${{ secrets.SYMITAR_PASSWORD }}
           ssh-host-key: ${{ vars.SYMITAR_SSH_HOST_KEY }}
-          api-key: ${{ secrets.POWERON_PIPELINES_API_KEY }}
+          api-key: poweron-pipelines-live-test-only
           directory-type: helpFiles
-          local-directory-path: .github/workflows/live-integration-fixtures/helpfiles/
+          local-directory-path: .integration-fixtures/push/
           sync-mode: push
           dry-run: 'true'
 
-      - name: Check preview outputs
-        shell: bash
+      - name: End timing for preview
+        id: end_preview
+        run: node scripts/integration/report.js clock
+
+      - name: Assert preview outputs
         env:
-          DEPLOYED: ${{ steps.live.outputs.files-deployed }}
-          DELETED: ${{ steps.live.outputs.files-deleted }}
-          INSTALLED: ${{ steps.live.outputs.files-installed }}
-          REINSTALLED: ${{ steps.live.outputs.files-reinstalled }}
-          UNINSTALLED: ${{ steps.live.outputs.files-uninstalled }}
-        run: |
-          test "$DEPLOYED/$DELETED/$INSTALLED/$REINSTALLED/$UNINSTALLED" = '1/0/0/0/0'
+          ACTUAL: '${{ steps.preview.outputs.files-deployed }}/${{ steps.preview.outputs.files-deleted }}/${{ steps.preview.outputs.files-installed }}/${{ steps.preview.outputs.files-reinstalled }}/${{ steps.preview.outputs.files-uninstalled }}'
+          EXPECTED: '1/0/0/0/0'
+        run: node scripts/integration/report.js check
+
+      - name: Start timing for repeat_preview
+        id: start_repeat_preview
+        run: node scripts/integration/report.js clock
+
+      - name: Repeat preview to prove it did not deploy
+        id: repeat_preview
+        timeout-minutes: 3
+        uses: ./
+        env:
+          NODE_OPTIONS: --require "${{ github.workspace }}/scripts/integration/preload-license.js"
+        with:
+          symitar-hostname: '74.200.48.18'
+          sym-number: '627'
+          symitar-user-number: '1999'
+          symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
+          ssh-username: 'libum627'
+          ssh-password: ${{ secrets.SYMITAR_PASSWORD }}
+          ssh-host-key: ${{ vars.SYMITAR_SSH_HOST_KEY }}
+          api-key: poweron-pipelines-live-test-only
+          directory-type: helpFiles
+          local-directory-path: .integration-fixtures/push/
+          sync-mode: push
+          dry-run: 'true'
+
+      - name: End timing for repeat_preview
+        id: end_repeat_preview
+        run: node scripts/integration/report.js clock
+
+      - name: Assert repeat_preview outputs
+        env:
+          ACTUAL: '${{ steps.repeat_preview.outputs.files-deployed }}/${{ steps.repeat_preview.outputs.files-deleted }}/${{ steps.repeat_preview.outputs.files-installed }}/${{ steps.repeat_preview.outputs.files-reinstalled }}/${{ steps.repeat_preview.outputs.files-uninstalled }}'
+          EXPECTED: '1/0/0/0/0'
+        run: node scripts/integration/report.js check
+
+      - name: Start timing for push
+        id: start_push
+        run: node scripts/integration/report.js clock
+
+      - name: Push the run-owned bytes
+        id: push
+        timeout-minutes: 3
+        uses: ./
+        env:
+          NODE_OPTIONS: --require "${{ github.workspace }}/scripts/integration/preload-license.js"
+        with:
+          symitar-hostname: '74.200.48.18'
+          sym-number: '627'
+          symitar-user-number: '1999'
+          symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
+          ssh-username: 'libum627'
+          ssh-password: ${{ secrets.SYMITAR_PASSWORD }}
+          ssh-host-key: ${{ vars.SYMITAR_SSH_HOST_KEY }}
+          api-key: poweron-pipelines-live-test-only
+          directory-type: helpFiles
+          local-directory-path: .integration-fixtures/push/
+          sync-mode: push
+          dry-run: 'false'
+
+      - name: End timing for push
+        id: end_push
+        run: node scripts/integration/report.js clock
+
+      - name: Assert push outputs
+        env:
+          ACTUAL: '${{ steps.push.outputs.files-deployed }}/${{ steps.push.outputs.files-deleted }}/${{ steps.push.outputs.files-installed }}/${{ steps.push.outputs.files-reinstalled }}/${{ steps.push.outputs.files-uninstalled }}'
+          EXPECTED: '1/0/0/0/0'
+        run: node scripts/integration/report.js check
+
+      - name: Start timing for noop
+        id: start_noop
+        run: node scripts/integration/report.js clock
+
+      - name: Repeat push with identical bytes
+        id: noop
+        timeout-minutes: 3
+        uses: ./
+        env:
+          NODE_OPTIONS: --require "${{ github.workspace }}/scripts/integration/preload-license.js"
+        with:
+          symitar-hostname: '74.200.48.18'
+          sym-number: '627'
+          symitar-user-number: '1999'
+          symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
+          ssh-username: 'libum627'
+          ssh-password: ${{ secrets.SYMITAR_PASSWORD }}
+          ssh-host-key: ${{ vars.SYMITAR_SSH_HOST_KEY }}
+          api-key: poweron-pipelines-live-test-only
+          directory-type: helpFiles
+          local-directory-path: .integration-fixtures/push/
+          sync-mode: push
+          dry-run: 'false'
+
+      - name: End timing for noop
+        id: end_noop
+        run: node scripts/integration/report.js clock
+
+      - name: Assert noop outputs
+        env:
+          ACTUAL: '${{ steps.noop.outputs.files-deployed }}/${{ steps.noop.outputs.files-deleted }}/${{ steps.noop.outputs.files-installed }}/${{ steps.noop.outputs.files-reinstalled }}/${{ steps.noop.outputs.files-uninstalled }}'
+          EXPECTED: '0/0/0/0/0'
+        run: node scripts/integration/report.js check
+
+      - name: Start timing for pull_nomatch
+        id: start_pull_nomatch
+        run: node scripts/integration/report.js clock
+
+      - name: Preview pull with a pattern matching no files
+        id: pull_nomatch
+        timeout-minutes: 3
+        uses: ./
+        env:
+          NODE_OPTIONS: --require "${{ github.workspace }}/scripts/integration/preload-license.js"
+        with:
+          symitar-hostname: '74.200.48.18'
+          sym-number: '627'
+          symitar-user-number: '1999'
+          symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
+          ssh-username: 'libum627'
+          ssh-password: ${{ secrets.SYMITAR_PASSWORD }}
+          ssh-host-key: ${{ vars.SYMITAR_SSH_HOST_KEY }}
+          api-key: poweron-pipelines-live-test-only
+          directory-type: helpFiles
+          local-directory-path: .integration-fixtures/nomatch/
+          sync-mode: pull
+          dry-run: 'true'
+          pull-preserved-only: 'true'
+          preserve-server-files: '${{ steps.fixtures.outputs.name }}_ABSENT'
+
+      - name: End timing for pull_nomatch
+        id: end_pull_nomatch
+        run: node scripts/integration/report.js clock
+
+      - name: Assert pull_nomatch outputs
+        env:
+          ACTUAL: '${{ steps.pull_nomatch.outputs.files-deployed }}/${{ steps.pull_nomatch.outputs.files-deleted }}/${{ steps.pull_nomatch.outputs.files-installed }}/${{ steps.pull_nomatch.outputs.files-reinstalled }}/${{ steps.pull_nomatch.outputs.files-uninstalled }}'
+          EXPECTED: '0/0/0/0/0'
+        run: node scripts/integration/report.js check
+
+      - name: Start timing for pull_preview
+        id: start_pull_preview
+        run: node scripts/integration/report.js clock
+
+      - name: Preview a preserved-only pull with multiline patterns
+        id: pull_preview
+        timeout-minutes: 3
+        uses: ./
+        env:
+          NODE_OPTIONS: --require "${{ github.workspace }}/scripts/integration/preload-license.js"
+        with:
+          symitar-hostname: '74.200.48.18'
+          sym-number: '627'
+          symitar-user-number: '1999'
+          symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
+          ssh-username: 'libum627'
+          ssh-password: ${{ secrets.SYMITAR_PASSWORD }}
+          ssh-host-key: ${{ vars.SYMITAR_SSH_HOST_KEY }}
+          api-key: poweron-pipelines-live-test-only
+          directory-type: helpFiles
+          local-directory-path: .integration-fixtures/preview/
+          sync-mode: pull
+          dry-run: 'true'
+          pull-preserved-only: 'true'
+          preserve-server-files: |
+            - ${{ steps.fixtures.outputs.name }}_ABSENT
+            - ${{ steps.fixtures.outputs.name }}
+
+      - name: End timing for pull_preview
+        id: end_pull_preview
+        run: node scripts/integration/report.js clock
+
+      - name: Assert pull_preview outputs
+        env:
+          ACTUAL: '${{ steps.pull_preview.outputs.files-deployed }}/${{ steps.pull_preview.outputs.files-deleted }}/${{ steps.pull_preview.outputs.files-installed }}/${{ steps.pull_preview.outputs.files-reinstalled }}/${{ steps.pull_preview.outputs.files-uninstalled }}'
+          EXPECTED: '1/0/0/0/0'
+        run: node scripts/integration/report.js check
+
+      - name: Start timing for pull
+        id: start_pull
+        run: node scripts/integration/report.js clock
+
+      - name: Pull only the run-owned file
+        id: pull
+        timeout-minutes: 3
+        uses: ./
+        env:
+          NODE_OPTIONS: --require "${{ github.workspace }}/scripts/integration/preload-license.js"
+        with:
+          symitar-hostname: '74.200.48.18'
+          sym-number: '627'
+          symitar-user-number: '1999'
+          symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
+          ssh-username: 'libum627'
+          ssh-password: ${{ secrets.SYMITAR_PASSWORD }}
+          ssh-host-key: ${{ vars.SYMITAR_SSH_HOST_KEY }}
+          api-key: poweron-pipelines-live-test-only
+          directory-type: helpFiles
+          local-directory-path: .integration-fixtures/pull/
+          sync-mode: pull
+          dry-run: 'false'
+          pull-preserved-only: 'true'
+          preserve-server-files: |
+            - ${{ steps.fixtures.outputs.name }}_ABSENT
+            - ${{ steps.fixtures.outputs.name }}
+
+      - name: End timing for pull
+        id: end_pull
+        run: node scripts/integration/report.js clock
+
+      - name: Assert pull outputs
+        env:
+          ACTUAL: '${{ steps.pull.outputs.files-deployed }}/${{ steps.pull.outputs.files-deleted }}/${{ steps.pull.outputs.files-installed }}/${{ steps.pull.outputs.files-reinstalled }}/${{ steps.pull.outputs.files-uninstalled }}'
+          EXPECTED: '1/0/0/0/0'
+        run: node scripts/integration/report.js check
+
+      - name: Verify exact pulled bytes and dry-run workspace immutability
+        run: node scripts/integration/fixtures.js verify-local
+
+      - name: Start timing for cleanup
+        id: start_cleanup
+        run: node scripts/integration/report.js clock
+
+      - name: Verify remote bytes then remove only the run-owned fixture
+        id: cleanup
+        timeout-minutes: 2
+        env:
+          HOST_KEY: ${{ vars.SYMITAR_SSH_HOST_KEY }}
+          AIX_PASSWORD: ${{ secrets.SYMITAR_PASSWORD }}
+          SYM_PASSWORD: ${{ secrets.SYMITAR_USER_PASSWORD }}
+        run: node scripts/integration/fixtures.js cleanup
+
+      - name: End timing for cleanup
+        id: end_cleanup
+        run: node scripts/integration/report.js clock
+
+      # Cleanup intentionally has the default success() condition. After any
+      # failure/cancellation, retain the journal and require reviewed recovery;
+      # never initiate another authentication attempt automatically.
+
+      - name: Record per-scenario timing and outcome
+        if: always() && steps.checkout.outcome == 'success'
+        env:
+          STEPS: ${{ toJSON(steps) }}
+        run: node scripts/integration/report.js summary
+
+      - name: Upload timing and fixture journal
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: symitar-live-evidence
+          path: .integration-results/
+          include-hidden-files: true
+          if-no-files-found: ignore

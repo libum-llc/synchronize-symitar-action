@@ -6,7 +6,7 @@
 - Require unattended host trust and both SSH and Symitar credentials; fail without connector fallback or authentication retries.
 - Adopt shared checksum comparisons and verified synchronization behavior from core v2.0 / Symitar SDK v1.30.0.
 - Make dry runs read-only, add optional dependent PowerOn reinstalls and `files-reinstalled`, and support exclusions in preservation patterns; preserved-only pulls with no patterns download nothing.
-- Preserve existing input names, list parsing, GitHub step outputs, and branch/PR handling. Live checks use one connector and require manual dispatch.
+- Preserve existing input names, list parsing, GitHub step outputs, and branch/PR handling. Live integration uses the Symitar connector on trusted branch pushes and manual dispatch, with simulated licensing, fail-fast scenarios, and timing evidence.
 
 
 

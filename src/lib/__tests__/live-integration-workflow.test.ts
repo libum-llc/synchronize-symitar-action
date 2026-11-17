@@ -1,89 +1,87 @@
 import { readFileSync } from 'fs';
 import * as path from 'path';
-
-import { load } from 'js-yaml';
-
-// Keep live coverage manual, single-attempt and read-only. Failure and legacy
-// selector cases belong in the offline suite, never in console login loops.
-const WORKFLOW_PATH = path.join(
-  __dirname,
-  '..',
-  '..',
-  '..',
-  '.github',
-  'workflows',
-  'live-integration.yml',
+const { load } = require('js-yaml');
+const workflow = load(
+  readFileSync(
+    path.join(__dirname, '../../../.github/workflows/live-integration.yml'),
+    'utf8',
+  ),
 );
-
-interface WorkflowStep {
-  name?: string;
+const job = workflow.jobs.symitar;
+const steps = job.steps as Array<{
+  id?: string;
   uses?: string;
+  run?: string;
+  if?: string;
+  'continue-on-error'?: boolean;
   with?: Record<string, string>;
-}
+  env?: Record<string, string>;
+}>;
+const actions = steps.filter((step) => step.uses === './');
 
-const workflowSource = (): string => readFileSync(WORKFLOW_PATH, 'utf8');
-
-const actionSteps = (): WorkflowStep[] => {
-  const workflow = load(workflowSource()) as {
-    jobs: Record<string, { steps: WorkflowStep[]; if?: string }>;
-  };
-  const job = workflow.jobs['symitar'];
-
-  return job.steps.filter((step) => step.uses === './');
-};
-
-/** Directory types whose remote directory is not REPWRITERSPECS. */
-const NON_POWERON_DIRECTORY_TYPES = ['letterFiles', 'dataFiles', 'helpFiles'];
-
-describe('live-integration workflow safety invariants', () => {
-  it('invokes the action exactly once with no retry step', () => {
-    expect(actionSteps()).toHaveLength(1);
+describe('live connector coverage and authentication safety', () => {
+  it('runs on trusted branch pushes or dispatch, never fork/target PR events', () => {
+    expect(Object.keys(workflow.on).sort()).toEqual([
+      'push',
+      'workflow_dispatch',
+    ]);
+    expect(workflow.on.push['branches-ignore']).toContain('main');
+    expect(job.if).toContain('github.run_attempt == 1');
+    expect(job.strategy).toBeUndefined();
+    expect(workflow.concurrency['cancel-in-progress']).toBe(false);
   });
-
-  it('runs every scenario as a dry run', () => {
-    for (const step of actionSteps()) {
-      expect([step.name, step.with?.['dry-run']]).toEqual([step.name, 'true']);
-    }
-  });
-
-  it('limits the live preview to non-PowerOn directories', () => {
-    for (const step of actionSteps()) {
-      expect(NON_POWERON_DIRECTORY_TYPES).toContain(
-        step.with?.['directory-type'],
-      );
-    }
-  });
-
-  it('declares every directory-type it uses as a known type', () => {
-    const known = [...NON_POWERON_DIRECTORY_TYPES, 'powerOns'];
-
-    for (const step of actionSteps()) {
-      expect(known).toContain(step.with?.['directory-type']);
-    }
-  });
-
-  it('requires manual dispatch and never runs on pull requests or pushes', () => {
-    const workflow = load(workflowSource()) as { on: Record<string, unknown> };
-    expect(Object.keys(workflow.on)).toEqual(['workflow_dispatch']);
-  });
-
-  it('supplies explicit host trust and omits legacy selectors', () => {
-    for (const step of actionSteps()) {
+  it('tests the committed bundle through only the default connector', () => {
+    for (const step of actions) {
       expect(step.with?.['ssh-host-key']).toBe(
         '${{ vars.SYMITAR_SSH_HOST_KEY }}',
       );
       expect(step.with).not.toHaveProperty('connection-type');
       expect(step.with).not.toHaveProperty('symitar-app-port');
+      expect(step.with?.['api-key']).toBe('poweron-pipelines-live-test-only');
+      expect(step.env?.NODE_OPTIONS).toContain(
+        'scripts/integration/preload-license.js',
+      );
+      for (const key of ['ssh-password', 'symitar-user-password'])
+        expect(step.with?.[key]).toMatch(/^\$\{\{ secrets\./);
+    }
+    expect(steps.some((step) => step.run?.includes('pnpm build'))).toBe(false);
+  });
+  it('never runs a connecting step unconditionally after failure', () => {
+    for (const step of steps.filter(
+      (s) =>
+        s.uses === './' ||
+        /fixtures.js (check-absent|cleanup)/.test(s.run || ''),
+    )) {
+      expect(step.if).toBeUndefined();
     }
   });
-
-  it('never inlines a credential-shaped value', () => {
-    for (const step of actionSteps()) {
-      for (const [name, value] of Object.entries(step.with ?? {})) {
-        if (/password|api-key|token/.test(name)) {
-          expect(value).toMatch(/^\$\{\{\s*secrets\./);
-        }
-      }
+  it('retains preview, push, no-op, filtered pull, and byte transfer coverage', () => {
+    expect(actions.map((step) => step.id)).toEqual([
+      'preview',
+      'repeat_preview',
+      'push',
+      'noop',
+      'pull_nomatch',
+      'pull_preview',
+      'pull',
+    ]);
+    expect(actions.filter((step) => step['continue-on-error'])).toEqual([]);
+    expect(
+      actions
+        .filter((step) => step.with?.['dry-run'] === 'false')
+        .map((step) => step.id),
+    ).toEqual(['push', 'noop', 'pull']);
+    for (const step of actions) {
+      expect(step.with?.['directory-type']).toBe('helpFiles');
+      expect(step.with?.['sync-mode']).not.toBe('mirror');
     }
+    expect(actions.at(-1)?.with?.['pull-preserved-only']).toBe('true');
+    expect(actions.at(-1)?.with?.['preserve-server-files']).toContain('\n');
+    expect(
+      steps.findIndex((step) => step.run?.endsWith('check-absent')),
+    ).toBeLessThan(steps.indexOf(actions[0]));
+    expect(
+      steps.findIndex((step) => step.run?.endsWith('verify-local')),
+    ).toBeLessThan(steps.findIndex((step) => step.run?.endsWith('cleanup')));
   });
 });
