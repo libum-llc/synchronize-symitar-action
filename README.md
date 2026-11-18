@@ -443,7 +443,7 @@ Set `reinstall-dependent-powerons: true` to install or reinstall listed parent P
 | `pull-request-id`   | Number of the pull request opened or reused by `create-pull-request`       |
 | `pull-request-url`  | Web URL of the pull request opened or reused by `create-pull-request`      |
 
-The seven synchronization outputs are published together whenever a synchronization
+The eight synchronization outputs are published together whenever a synchronization
 completes — every directory type, every sync mode, dry run or not. Directory
 types that cannot install, and pull runs, publish `0` for
 `files-installed`/`files-uninstalled` rather than omitting them, so a step
