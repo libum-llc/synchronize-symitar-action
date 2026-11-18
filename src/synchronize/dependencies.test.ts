@@ -4,10 +4,14 @@ import * as path from 'path';
 
 import { getOctokit } from '@actions/github';
 
-import { validateApiKey } from '@libum-llc/pipelines-core';
+import {
+  createQuestClient,
+  validateApiKey,
+  runSynchronizeDirectoryTask,
+  type PipelineClient,
+} from '@libum-llc/pipelines-core';
 
 import { createSynchronizeDependencies } from './dependencies';
-import { createHTTPsClient, createSSHClient } from '../lib/task-orchestration';
 
 const mockList = jest.fn();
 const mockCreate = jest.fn();
@@ -79,14 +83,88 @@ describe('createSynchronizeDependencies', () => {
     fs.rmSync(scratch, { recursive: true, force: true });
   });
 
+  it.each(['powerOns', 'letterFiles', 'dataFiles', 'helpFiles'])(
+    'wires a %s preview through the real core without mutations',
+    async (directoryType) => {
+      process.env.GITHUB_WORKSPACE = scratch;
+      process.env.RUNNER_TEMP = scratch;
+      fs.mkdirSync(path.join(scratch, 'fixture'));
+      const bytes = Buffer.from([0x41, 0x0d, 0x0a, 0xff, 0x00]);
+      fs.writeFileSync(path.join(scratch, 'fixture', 'NEW'), bytes);
+      setActionInputs({
+        'directory-type': directoryType,
+        'local-directory-path': 'fixture/',
+        'connection-type': 'https',
+        'symitar-app-port': 'not-a-port',
+      });
+      const deps = createSynchronizeDependencies();
+      const preview = {
+        synced: ['NEW'],
+        deleted: [],
+        skipped: [],
+        outliers: [],
+        errors: [],
+      };
+      const client = {
+        syncFiles: jest.fn().mockResolvedValue(preview),
+        getChangedFiles: jest.fn(),
+        listFiles: jest.fn().mockResolvedValue([]),
+        validatePowerOn: jest.fn(),
+        deployFile: jest.fn(),
+        removeFile: jest.fn(),
+        installPowerOn: jest.fn(),
+        end: jest.fn().mockResolvedValue(undefined),
+      };
+      const connect = jest
+        .fn()
+        .mockResolvedValue(client as unknown as PipelineClient);
+      await runSynchronizeDirectoryTask({
+        ...deps,
+        createQuestClient: connect,
+        validateApiKey: jest.fn().mockResolvedValue(undefined),
+      });
+      expect(connect).toHaveBeenCalledTimes(1);
+      expect(connect).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workspacePath: scratch,
+          symitarHostname: 'symitar.example.com',
+          isDryRun: true,
+        }),
+      );
+      expect(client.syncFiles).toHaveBeenCalledWith(
+        expect.stringContaining('/fixture/'),
+        expect.any(String),
+        'push',
+        expect.objectContaining({ compareMode: 'checksum' }),
+        true,
+      );
+      for (const mutate of [
+        client.validatePowerOn,
+        client.deployFile,
+        client.removeFile,
+        client.installPowerOn,
+      ])
+        expect(mutate).not.toHaveBeenCalled();
+      expect(client.end).toHaveBeenCalledTimes(1);
+      expect(mockCreate).not.toHaveBeenCalled();
+      expect(fs.readFileSync(path.join(scratch, 'fixture', 'NEW'))).toEqual(
+        bytes,
+      );
+      const output = fs.readFileSync(outputFile, 'utf8');
+      expect(output).toMatch(/^files-deployed<<[\s\S]*?^1$/m);
+      expect(output).toMatch(/^files-reinstalled<<[\s\S]*?^0$/m);
+    },
+  );
+
   it('supplies every dependency core requires', () => {
     const dependencies = createSynchronizeDependencies();
 
     expect(dependencies.task).toBeDefined();
     expect(dependencies.loadConfig).toEqual(expect.any(Function));
     expect(dependencies.validateApiKey).toBe(validateApiKey);
-    expect(dependencies.createHttpsClient).toBe(createHTTPsClient);
-    expect(dependencies.createSshClient).toBe(createSSHClient);
+    expect(dependencies.createQuestClient).toBe(createQuestClient);
+    expect(dependencies.createHttpsClient).toBeUndefined();
+    expect(dependencies.createSshClient).toBeUndefined();
     expect(dependencies.pullRequestPublisher).toBeDefined();
   });
 

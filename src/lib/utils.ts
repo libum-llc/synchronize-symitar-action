@@ -6,6 +6,7 @@ import * as core from '@actions/core';
  */
 const INPUT_NAME_OVERRIDES: Record<string, string> = {
   isDryRun: 'dry-run',
+  reinstallDependentPowerOns: 'reinstall-dependent-powerons',
   installPowerOns: 'install-poweron-list',
   validateIgnorePowerOns: 'validate-ignore-list',
   // Not `pull-request-description`: the GitHub REST API calls this field

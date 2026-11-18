@@ -1,7 +1,7 @@
 import { execFileSync } from 'child_process';
 import { tmpdir } from 'os';
 
-import { SymitarHTTPs, SymitarSSH, SymitarSyncMode } from '@libum-llc/symitar';
+import { SymitarSyncMode } from '@libum-llc/symitar';
 
 import {
   DEFAULT_POWERON_DIRECTORY,
@@ -184,15 +184,23 @@ function loadCommonConfig(): CommonTaskConfig {
       .join('\n')}`,
   );
 
-  // Get Symitar connection inputs. SSH credentials are required for every
-  // connection type: the HTTPS client delegates file transfer and change
-  // detection to SSH, and core's runner reaches for SSH-only worker APIs
-  // (install/uninstall workers, remote mtimes) in both branches.
+  // v2.2 uses the Symitar connector over SSH for every legacy selector value.
   const symitarHostname: string = getInput('symitarHostname', true);
   validateHostname(symitarHostname, 'symitarHostname');
 
+  const sshHostKey = getInput('sshHostKey', false).trim() || undefined;
   const sshUsername: string = getInput('sshUsername', true);
+  if (!sshUsername.trim())
+    throw new InputError(
+      'Missing required Symitar credential: sshUsername',
+      'sshUsername',
+    );
   const sshPassword: string = getInput('sshPassword', true);
+  if (!sshPassword.trim())
+    throw new InputError(
+      'Missing required Symitar credential: sshPassword',
+      'sshPassword',
+    );
   const sshPort: number = parseInt(
     getInput('sshPort', false) || DEFAULT_SSH_PORT,
     10,
@@ -207,7 +215,17 @@ function loadCommonConfig(): CommonTaskConfig {
   const symNumber: number = symNumberInput ? Number(symNumberInput) : NaN;
 
   const symitarUserNumber: string = getInput('symitarUserNumber', true);
+  if (!symitarUserNumber.trim())
+    throw new InputError(
+      'Missing required Symitar credential: symitarUserNumber',
+      'symitarUserNumber',
+    );
   const symitarUserPassword: string = getInput('symitarUserPassword', true);
+  if (!symitarUserPassword.trim())
+    throw new InputError(
+      'Missing required Symitar credential: symitarUserPassword',
+      'symitarUserPassword',
+    );
   const debug: boolean = getBoolInput('debug', false);
 
   // Validate symNumber.
@@ -244,6 +262,7 @@ function loadCommonConfig(): CommonTaskConfig {
     apiKey,
     powerOnsDirectory,
     symitarHostname,
+    sshHostKey,
     sshUsername,
     sshPassword,
     sshPort,
@@ -331,6 +350,10 @@ export function loadSynchronizeConfig(): SynchronizeActionConfig {
   // silently defaulting to a live mutation
   const isDryRun: boolean = getBoolInput('isDryRun', true);
   const skipValidation: boolean = getBoolInput('skipValidation', false);
+  const reinstallDependentPowerOns = getBoolInput(
+    'reinstallDependentPowerOns',
+    false,
+  );
   const syncModeInput = getInput('syncMode', true);
 
   if (!syncModeInput || !['push', 'pull', 'mirror'].includes(syncModeInput)) {
@@ -357,39 +380,7 @@ export function loadSynchronizeConfig(): SynchronizeActionConfig {
   }
   const syncMethod: SyncMethod = syncMethodInput;
 
-  // Validate the connection type (https or ssh).
-  //
-  // The Azure DevOps extension declares `connectionType` as a two-option
-  // `pickList` in `task.json`, so core's runner can safely treat the input as
-  // `'https' | 'ssh'`. `action.yml` has no equivalent constraint, and the
-  // runner branches `connectionType === 'https' ? HTTPS : SSH` - meaning a
-  // typo such as `htpps` would otherwise silently run the SSH path against an
-  // HTTPS-configured job. The guarantee is restored here.
-  //
-  // The value is deliberately not returned on the config: core's runner reads
-  // this input itself through the `TaskHost`, and `SynchronizeDirectoryConfig`
-  // is part of the package's public API, so it cannot carry a field core does
-  // not define.
-  // The `|| 'ssh'` mirrors `action.yml`'s own default rather than inventing
-  // one. A workflow *can* still arrive here empty - `connection-type: ${{
-  // vars.CONN_TYPE }}` with the variable unset passes an explicit empty
-  // string, and GitHub does not substitute the action.yml default when the key
-  // is present - and this loader then validates `'ssh'` and moves on. That is
-  // deliberate rather than an oversight: `connectionType` is not returned on
-  // the config, so the local default changes nothing about how the run
-  // behaves. Core re-reads the input itself through `requireInput` and throws
-  // `Input required and not supplied: connection-type`, which is already a
-  // clear message, and it does so before any Symitar connection is opened -
-  // one license-server round trip is the whole cost. Rejecting empty here as
-  // well was tried and reverted: it buys very little and turns a value a
-  // workflow may legitimately expect to fall back into a hard failure.
-  const connectionType = getInput('connectionType', false) || 'ssh';
-  if (connectionType !== 'https' && connectionType !== 'ssh') {
-    throw new InputError(
-      `Invalid connection type: '${connectionType}'. Must be 'https' or 'ssh'`,
-      'connectionType',
-    );
-  }
+  // v2.2 ignores legacy connection-type and symitar-app-port inputs.
 
   // preserveServerFiles comes exclusively from the repo config, which parses
   // it from this same input
@@ -502,29 +493,6 @@ export function loadSynchronizeConfig(): SynchronizeActionConfig {
     );
   }
 
-  // Parse symitar app port - required for HTTPS, unused for SSH.
-  //
-  // Required *here* rather than left to `createHTTPsClient`, which is where it
-  // used to surface. Core reaches that factory only after `validateApiKey` and
-  // after `await createSshClient(config)` has already opened a session on the
-  // production Symitar host, and the matching `end()` lives in the
-  // transaction's cleanup, which that throw never reaches - so a misconfigured
-  // HTTPS run burned a license round trip, logged into the Sym, and leaked the
-  // connection. v1 rejected the combination during input validation; this
-  // restores that, and matches the rule the `github-token` check above follows.
-  const symitarAppPortInput = getInput('symitarAppPort', false).trim();
-  if (connectionType === 'https' && !symitarAppPortInput) {
-    throw new InputError(
-      "The 'symitar-app-port' input is required when 'connection-type' is 'https' (typically 42 + the sym number, e.g. 42627).",
-      'symitarAppPort',
-    );
-  }
-  let symitarAppPort: number | undefined;
-  if (symitarAppPortInput) {
-    symitarAppPort = parseInt(symitarAppPortInput, 10);
-    validatePort(symitarAppPort, 'symitarAppPort');
-  }
-
   return {
     ...commonConfig,
     sourcePath,
@@ -533,10 +501,10 @@ export function loadSynchronizeConfig(): SynchronizeActionConfig {
     tempDirectory,
     isDryRun,
     skipValidation,
+    reinstallDependentPowerOns,
     syncMode,
     syncMethod,
     sftpConcurrency,
-    symitarAppPort,
     preserveServerFiles,
     pullPreservedOnly,
     commitPulledChanges,
@@ -551,62 +519,4 @@ export function loadSynchronizeConfig(): SynchronizeActionConfig {
     gitUserEmail,
     githubToken,
   };
-}
-
-/**
- * Creates a SymitarHTTPs client with the provided configuration.
- *
- * The synchronize runner always builds an SSH client first and passes it in
- * here, because it goes on to call SSH-only APIs on that same client
- * (`getFileModificationTime`, `createInstallWorker`, `createUninstallWorker`)
- * regardless of the connection type. Sharing the one connection avoids opening
- * a second session, and means `end()` on the HTTPS client closes it.
- */
-export function createHTTPsClient(
-  config: SynchronizeDirectoryConfig,
-  sshClient?: SymitarSSH,
-): SymitarHTTPs {
-  if (!config.symitarAppPort) {
-    throw new InputError(
-      'symitarAppPort is required when using HTTPS connection',
-      'symitarAppPort',
-    );
-  }
-
-  return new SymitarHTTPs(
-    `https://${config.symitarHostname}:${config.symitarAppPort}`,
-    {
-      symNumber: config.symNumber,
-      symitarUserNumber: config.symitarUserNumber,
-      symitarUserPassword: config.symitarUserPassword,
-    },
-    config.debug ? 'debug' : 'info',
-    {
-      port: config.sshPort,
-      username: config.sshUsername,
-      password: config.sshPassword,
-    },
-    sshClient ? { sshClient } : undefined,
-  );
-}
-
-/**
- * Creates a SymitarSSH client with the provided configuration
- */
-export async function createSSHClient(
-  config: CommonTaskConfig,
-): Promise<SymitarSSH> {
-  const client = new SymitarSSH(
-    {
-      host: config.symitarHostname,
-      port: config.sshPort,
-      username: config.sshUsername,
-      password: config.sshPassword,
-    },
-    config.debug ? 'debug' : 'info',
-  );
-
-  await client.isReady;
-
-  return client;
 }

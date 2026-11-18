@@ -5,8 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 GitHub Action to synchronize directories (PowerOns, LetterFiles, DataFiles,
-HelpFiles) on the Jack Henry Symitar credit union core platform. Supports both
-SSH and HTTPS connections with push, pull, and mirror sync modes. File transfers
+HelpFiles) on the Jack Henry Symitar credit union core platform. Uses the Symitar connector over SSH in v2.2 with push, pull, and mirror sync modes. File transfers
 can use SFTP (with configurable concurrency) or rsync.
 
 ## Build Commands
@@ -68,10 +67,8 @@ surface resolve. (One test reads a file under core's `dist/` as *text* to check
 this repo's output mapping against what core actually publishes — that is not an
 import, and it is commented as such.)
 
-Note that importing the package applies core's module-scope
-`https.globalAgent.options.rejectUnauthorized = false`. That is a deliberate,
-documented owner decision in core (Symitar hosts commonly present certificates
-that fail default verification), not something to work around here.
+Core v2.0 owns the Symitar connector, currently using SSH. Do not restore
+legacy HTTPs/SSH client factories or global TLS verification bypasses.
 
 ### `src/lib/github-task-host.ts` — the `TaskHost` adapter
 
@@ -142,7 +139,7 @@ from `.poweron-pipelines/config.yml`. Also home to the validations the Azure
 extension gets from its `task.json` pick lists and its zod config schema, and
 which therefore have to be restored here:
 
-- `connectionType`, `syncMode` and `syncMethod` value checks
+- `syncMode` and `syncMethod` value checks; legacy `connectionType` is ignored in v2.2
 - hostname and port format checks, and the `sftp-concurrency` 1-20 range
 - `dry-run` is read as a **required** boolean, so an explicitly empty value
   fails the run rather than silently defaulting to a live mutation
@@ -162,12 +159,8 @@ which therefore have to be restored here:
   so a `create-pull-request` run that cannot resolve one is refused at load
   time rather than failing on a raw GitHub 422 after the pull has already
   mutated the workspace
-- **`symitar-app-port` is required at load time when `connection-type` is
-  `https`.** Not left to `createHTTPsClient`: core reaches that factory only
-  after `validateApiKey` *and* after `await createSshClient(config)` has opened
-  a session on the production host, and the matching `end()` lives in the
-  transaction cleanup that the throw never reaches — so the connection leaked.
-  v1 rejected the combination during input validation; this restores it
+- `connection-type` and `symitar-app-port` are accepted but ignored in v2.2. Do not read or validate them. Future protocol selection needs an explicit opt-in contract.
+- Both SSH and Symitar credentials are required. `ssh-host-key` is passed to core; otherwise the agent account needs known_hosts.
 - **`sym-number` is a whole number 0-999.** `isValidNumber` is only a
   `typeof`/`NaN` check, so `-627`, `627.5` and `1e6` otherwise reach the
   Symitar client as the sym to synchronize. Deliberately tighter than the
@@ -300,59 +293,25 @@ what consumers run, and they never run `pnpm install`. Two consequences:
 
 ### Live integration
 
-`.github/workflows/live-integration.yml` runs the committed bundle against SYM
-627 on a self-hosted runner. Two properties are load-bearing and must not be
-relaxed:
+`.github/workflows/live-integration.yml` runs on trusted branch pushes and
+manual dispatch. It tests the committed Action bundle through the Symitar
+connector; legacy selector and credential-rejection cases stay offline.
+Licensing alone is simulated with the configured organization ID. No real API
+key is needed. Approved host trust is required through SYMITAR_SSH_HOST_KEY or
+the runner account's known_hosts. Scenarios run sequentially and stop on an
+unexpected failure. Do not rerun failed jobs: inspect the failure before a new
+dispatch. The concurrency group is repository-scoped, so use a single shared
+runner or coordinate execution across repositories. The workflow summary and
+symitar-live-evidence artifact record per-scenario durations.
 
-- **The fork guard** in the job's `if:`. This is a public repo; a job-level
-  `if:` is evaluated before a runner is assigned, so a fork's pull request never
-  reaches the runner. Never switch the trigger to `pull_request_target`.
-- **Every scenario pairs `dry-run: true` with a non-PowerOn `directory-type`.**
-  Both halves are required, and the second is the one that is easy to lose.
-
-#### `dry-run: true` does NOT make a `powerOns` run read-only
-
-This is the single most important thing to know before editing that workflow.
-**PowerOn validation is not dry-run gated.** In `@libum-llc/symitar@1.12.0`,
-`dist/shared/sync-orchestrator.js:169-171`:
-
-```js
-shouldValidate = hasPowerOnOptions
-              && syncMode !== SymitarSyncMode.PULL
-              && !options.powerOn?.skipValidation;
-```
-
-There is no `isDryRun` term, and the block runs at line 195 — *before*
-`operations.executeSync` at line 215, which is where the dry-run short-circuit
-actually lives (`clients/ssh/ssh.synchronize.js:10`,
-`clients/https/https.synchronize.js:13`; both clients share this orchestrator).
-Validation writes to the host: `clients/ssh/ssh.validate.js` sftp-writes each
-changed PowerOn into REPWRITERSPECS under a temporary name with mode 0770,
-chmods and chgrps it, compiles it, then unlinks it — so a run that dies between
-the write and the unlink leaves a temp file on a live Sym.
-
-`hasPowerOnOptions` is `options.powerOn && remoteDirectory === REPWRITERSPECS`.
-Core always sets `options.powerOn`, so the **directory type is the only
-discriminator**, and every current scenario uses `helpFiles` → `HELPFILES`.
-
-To add a `powerOns` scenario, one of these must hold: `sync-mode: pull`
-(validation is skipped for PULL), `skip-validation: 'true'`, or an explicit,
-reviewed decision to accept host writes from a pull-request-triggered workflow.
-`src/lib/__tests__/live-integration-workflow.test.ts` enforces exactly that
-disjunction in CI, so this cannot regress silently.
-
-Two related traps in reading that workflow's assertions:
-
-- `outliers-count`, `files-installed` and `files-uninstalled` are **structurally
-  zero** under dry run — outliers are populated only inside the SFTP transport,
-  which dry-run short-circuits before reaching, and install/uninstall are gated
-  on `!isDryRun`. Asserting `0` there proves the output plumbing works, not that
-  no drift exists.
-- `sync-method: rsync` is never exercised live, because `executeSyncTransport`
-  returns a synthetic result before choosing a transport.
-
-Mutating coverage belongs in `poweron-pipelines`' own live suite, which owns
-run-scoped fixtures and recovery scripts.
+In v2.2, dry runs skip validation, transfers, lifecycle mutations, commits and
+PR creation. They still connect and read remote state. Counts describe planned
+changes; a PowerOn dry run can report planned installations/reinstalls without
+performing them. Dry runs use SFTP planning and do not verify actual rsync.
+This Action also verifies one run-owned HELPFILE push/pull round trip and exact
+remote bytes before targeted cleanup. The larger rollback and lifecycle matrix
+stays in `poweron-pipelines`. See `scripts/integration/README.md` for recovery
+rules. Compatibility input values are tested offline, without extra host calls.
 
 ### Where documentation goes
 
@@ -381,8 +340,7 @@ the token.
 
 - `@libum-llc/pipelines-core` — the shared, host-agnostic task runner and
   supporting modules
-- `@libum-llc/symitar` — proprietary Symitar client (`SymitarHTTPs`,
-  `SymitarSSH`). Core pins this to an **exact** version; keep this repo's
+- `@libum-llc/symitar` — proprietary Symitar client (the new Symitar connector). Core pins this to an **exact** version; keep this repo's
   version identical to core's, or the tree gets two copies and `instanceof`
   checks across them break silently.
 - `@actions/core` — GitHub Actions toolkit, reached through
@@ -397,3 +355,12 @@ hierarchy that `main.ts` dispatches on and the helpers core's own runner calls,
 which makes suites vacuous rather than failing. Spread `jest.requireActual` and
 override only what you mean to stub. The same applies to
 `jest.mock('@libum-llc/symitar', ...)`, since core imports it too.
+
+### Published v2.2 dependency
+
+Both Actions pin published `@libum-llc/pipelines-core@2.0.0` and Symitar
+`1.30.0`. Use `pnpm install --frozen-lockfile`; do not substitute workspace
+symlinks or ignore lock drift. CI uses GitHub Packages with `NODE_AUTH_TOKEN`;
+no Git source checkout or Git credential helper is needed. Rebuild and commit
+`dist/` after dependency changes. Consumers run that inlined bundle without
+registry credentials.

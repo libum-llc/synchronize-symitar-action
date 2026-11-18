@@ -1,8 +1,8 @@
 {
   "name": "synchronize-symitar-action",
-  "version": "2.0.1",
+  "version": "2.2.0",
   "packageManager": "pnpm@10.20.0",
-  "description": "GitHub Action to synchronize a directory on the Jack Henry™ credit union core platform",
+  "description": "GitHub Action to synchronize a directory on the Jack Henry\u2122 credit union core platform",
   "main": "src/main.ts",
   "scripts": {
     "build": "ncc build src/main.ts -o dist --minify --license licenses.txt && node -e \"const fs=require('fs'),path=require('path'),dist=path.resolve('dist');if(fs.existsSync(dist)){for(const entry of fs.readdirSync(dist)){if(entry.endsWith('.d.ts')||entry.endsWith('.d.ts.map')||entry.endsWith('.js.map')||entry==='sourcemap-register.js'||entry==='pagent.exe')fs.rmSync(path.join(dist,entry),{force:true});}for(const entry of ['build','lib','synchronize'])fs.rmSync(path.join(dist,entry),{force:true,recursive:true});}\"",
@@ -29,8 +29,8 @@
   "dependencies": {
     "@actions/core": "^1.10.1",
     "@actions/github": "^6.0.0",
-    "@libum-llc/pipelines-core": "1.0.1",
-    "@libum-llc/symitar": "1.12.0"
+    "@libum-llc/pipelines-core": "2.0.0",
+    "@libum-llc/symitar": "1.30.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",

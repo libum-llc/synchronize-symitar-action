@@ -55,6 +55,8 @@ const INPUT_NAME_MAPPING: Array<[pipelinesName: string, actionName: string]> = [
   ['sshUsername', 'ssh-username'],
   ['sshPassword', 'ssh-password'],
   ['sshPort', 'ssh-port'],
+  ['sshHostKey', 'ssh-host-key'],
+  ['reinstallDependentPowerOns', 'reinstall-dependent-powerons'],
   ['symNumber', 'sym-number'],
   ['symitarUserNumber', 'symitar-user-number'],
   ['symitarUserPassword', 'symitar-user-password'],

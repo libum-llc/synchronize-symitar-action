@@ -11,8 +11,8 @@ GitHub Action to synchronize a directory on the Jack Henry™ credit union core 
 ---
 
 - [Usage](#usage)
+  - [Symitar Connection and Host Trust](#symitar-connection-and-host-trust)
   - [Basic Example](#basic-example)
-  - [Using HTTPS Connection](#using-https-connection)
   - [Synchronizing Other Directory Types](#synchronizing-other-directory-types)
   - [Using Mirror Mode](#using-mirror-mode)
   - [Preserving Server-Managed Files](#preserving-server-managed-files)
@@ -32,6 +32,14 @@ GitHub Action to synchronize a directory on the Jack Henry™ credit union core 
 This action must run on a self-hosted runner with network access to the Symitar host.
 The examples below use `runs-on: self-hosted`; if your organization uses runner labels,
 include the label for the runner that can reach Symitar.
+
+### Symitar Connection and Host Trust
+
+The Symitar connector uses SSH in v2.2; this does not restrict future protocols. `connection-type` and `symitar-app-port` remain accepted but are ignored in this release. Omit them from new workflows. A future protocol selection must not silently reinterpret retained legacy values.
+
+Provide both AIX/SSH and Symitar credentials. Set `ssh-host-key` to the base64 field of an administrator-approved SSH public key, or provision the agent service account's `~/.ssh/known_hosts` with `ssh-keygen` available. The key is not a private key, a SHA256 fingerprint, or a complete `known_hosts` line. Unknown or changed trust fails with an error; the action never prompts for `yes` or accepts a new key automatically.
+
+Examples use `vars.SYMITAR_SSH_HOST_KEY` for that approved public value. `api-key` still requires a valid PowerOn Pipelines key.
 
 ### Basic Example
 
@@ -55,37 +63,14 @@ jobs:
         uses: libum-llc/synchronize-symitar-action@v2
         with:
           directory-type: powerOns
-          symitar-hostname: 93.455.43.232
+          symitar-hostname: symitar.example.com
           sym-number: 627
           symitar-user-number: 1995
           symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
           ssh-username: libum
           ssh-password: ${{ secrets.SSH_PASSWORD }}
+          ssh-host-key: ${{ vars.SYMITAR_SSH_HOST_KEY }}
           api-key: ${{ secrets.API_KEY }}
-          sync-mode: push
-          dry-run: false
-```
-
-### Using HTTPS Connection
-
-```yaml
-jobs:
-  deploy:
-    runs-on: self-hosted
-    steps:
-      - name: Synchronize PowerOns (HTTPS)
-        uses: libum-llc/synchronize-symitar-action@v2
-        with:
-          directory-type: powerOns
-          symitar-hostname: 93.455.43.232
-          symitar-app-port: 42627
-          sym-number: 627
-          symitar-user-number: 1995
-          symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
-          ssh-username: libum
-          ssh-password: ${{ secrets.SSH_PASSWORD }}
-          api-key: ${{ secrets.API_KEY }}
-          connection-type: https
           sync-mode: push
           dry-run: false
 ```
@@ -101,12 +86,13 @@ jobs:
         uses: libum-llc/synchronize-symitar-action@v2
         with:
           directory-type: letterFiles
-          symitar-hostname: 93.455.43.232
+          symitar-hostname: symitar.example.com
           sym-number: 627
           symitar-user-number: 1995
           symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
           ssh-username: libum
           ssh-password: ${{ secrets.SSH_PASSWORD }}
+          ssh-host-key: ${{ vars.SYMITAR_SSH_HOST_KEY }}
           api-key: ${{ secrets.API_KEY }}
           sync-mode: push
           dry-run: false
@@ -128,12 +114,13 @@ jobs:
         uses: libum-llc/synchronize-symitar-action@v2
         with:
           directory-type: powerOns
-          symitar-hostname: 93.455.43.232
+          symitar-hostname: symitar.example.com
           sym-number: 627
           symitar-user-number: 1995
           symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
           ssh-username: libum
           ssh-password: ${{ secrets.SSH_PASSWORD }}
+          ssh-host-key: ${{ vars.SYMITAR_SSH_HOST_KEY }}
           api-key: ${{ secrets.API_KEY }}
           sync-mode: mirror
           dry-run: false
@@ -152,12 +139,13 @@ jobs:
         uses: libum-llc/synchronize-symitar-action@v2
         with:
           directory-type: powerOns
-          symitar-hostname: 93.455.43.232
+          symitar-hostname: symitar.example.com
           sym-number: 627
           symitar-user-number: 1995
           symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
           ssh-username: libum
           ssh-password: ${{ secrets.SSH_PASSWORD }}
+          ssh-host-key: ${{ vars.SYMITAR_SSH_HOST_KEY }}
           api-key: ${{ secrets.API_KEY }}
           sync-mode: mirror
           dry-run: false
@@ -168,7 +156,7 @@ jobs:
 
 ### Pulling Preserved Files Back to Git
 
-Use `pull-preserved-only` to download only files matched by `preserve-server-files`. Enable `commit-pulled-changes` when the action should commit and push those changes.
+Use `pull-preserved-only` to download only files matched by `preserve-server-files`. With no preservation patterns, a preserved-only pull downloads nothing. Enable `commit-pulled-changes` when the action should commit and push those changes.
 
 ```yaml
 on:
@@ -194,12 +182,13 @@ jobs:
         uses: libum-llc/synchronize-symitar-action@v2
         with:
           directory-type: powerOns
-          symitar-hostname: 93.455.43.232
+          symitar-hostname: symitar.example.com
           sym-number: 627
           symitar-user-number: 1995
           symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
           ssh-username: libum
           ssh-password: ${{ secrets.SSH_PASSWORD }}
+          ssh-host-key: ${{ vars.SYMITAR_SSH_HOST_KEY }}
           api-key: ${{ secrets.API_KEY }}
           sync-mode: pull
           dry-run: false
@@ -239,12 +228,13 @@ jobs:
         uses: libum-llc/synchronize-symitar-action@v2
         with:
           directory-type: powerOns
-          symitar-hostname: 93.455.43.232
+          symitar-hostname: symitar.example.com
           sym-number: 627
           symitar-user-number: 1995
           symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
           ssh-username: libum
           ssh-password: ${{ secrets.SSH_PASSWORD }}
+          ssh-host-key: ${{ vars.SYMITAR_SSH_HOST_KEY }}
           api-key: ${{ secrets.API_KEY }}
           sync-mode: pull
           dry-run: false
@@ -286,12 +276,13 @@ jobs:
         uses: libum-llc/synchronize-symitar-action@v2
         with:
           directory-type: powerOns
-          symitar-hostname: 93.455.43.232
+          symitar-hostname: symitar.example.com
           sym-number: 627
           symitar-user-number: 1995
           symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
           ssh-username: libum
           ssh-password: ${{ secrets.SSH_PASSWORD }}
+          ssh-host-key: ${{ vars.SYMITAR_SSH_HOST_KEY }}
           api-key: ${{ secrets.API_KEY }}
           sync-mode: pull
           pull-preserved-only: true
@@ -348,6 +339,7 @@ jobs:
           symitar-user-password: ${{ secrets.SYMITAR_USER_PASSWORD }}
           ssh-username: ${{ secrets.SSH_USERNAME }}
           ssh-password: ${{ secrets.SSH_PASSWORD }}
+          ssh-host-key: ${{ vars.SYMITAR_SSH_HOST_KEY }}
           api-key: ${{ secrets.API_KEY }}
           sync-mode: push
           dry-run: ${{ inputs.dry_run }}
@@ -358,7 +350,7 @@ jobs:
 
 GitHub setup requirements:
 
-- Create a self-hosted runner that can reach the Symitar host over SSH or HTTPS.
+- Create a self-hosted runner that can reach the Symitar host over SSH.
 - Create a GitHub Environment such as `production-symitar` and configure required reviewers.
 - Store non-secret deployment values as environment or repository variables, such as `SYMITAR_HOSTNAME` and `SYM_NUMBER`.
 - Store credentials as environment or repository secrets: `SYMITAR_USER_NUMBER`, `SYMITAR_USER_PASSWORD`, `SSH_USERNAME`, `SSH_PASSWORD`, and `API_KEY`.
@@ -383,6 +375,8 @@ preserve-server-files: |
   - PFR.*
 ```
 
+Preservation patterns support exclusions: `*, !CUSTOM.*` preserves everything except `CUSTOM.*`. A negative pattern only removes matches from the positive selection; `!CUSTOM.*` alone selects nothing. Quote `!` values in YAML. These are glob patterns, not regular expressions. Patterns without `!` retain their behavior.
+
 Leading `- ` markers are stripped and blank entries are dropped. `validate-poweron-action` parses its list inputs the same way.
 
 ## Customizing
@@ -394,17 +388,19 @@ Leading `- ` markers are stripped and blank entries are dropped. `validate-power
 | `directory-type`        | Type of Symitar directory: `powerOns`, `letterFiles`, `dataFiles`, `helpFiles`                                    | Yes      | -                                                    |
 | `symitar-hostname`      | The endpoint by which you connect to the Symitar host                                                             | Yes      | -                                                    |
 | `sym-number`            | The directory (aka Sym) number for your connection. A whole number between 0 and 999; anything else is rejected as a typo. | Yes      | -                                                    |
-| `symitar-user-number`   | Your Symitar Quest user number                                                                                    | Yes      | -                                                    |
-| `symitar-user-password` | Your Symitar Quest password                                                                                       | Yes      | -                                                    |
-| `ssh-username`          | The AIX user name for the Symitar host                                                                            | Yes      | -                                                    |
-| `ssh-password`          | The AIX password for the Symitar host                                                                             | Yes      | -                                                    |
+| `symitar-user-number`   | Your Symitar user number                                                                                    | Yes      | -                                                    |
+| `symitar-user-password` | Your Symitar password                                                                                       | Yes      | -                                                    |
+| `ssh-username`          | AIX SSH username required by the current Symitar connector. | Yes      | -                                                    |
+| `ssh-password`          | AIX SSH password required by the current Symitar connector. | Yes      | -                                                    |
 | `ssh-port`              | The port to connect to the SSH server                                                                             | No       | `22`                                                 |
+| `ssh-host-key` | Approved SSH host public key base64 field; otherwise use preconfigured known_hosts. | No | - |
 | `api-key`               | Your PowerOn Pipelines API Key from [Libum Portal](https://portal.libum.io)                                       | Yes      | -                                                    |
-| `symitar-app-port`      | SymAppServer port. Typically `42` + `symNumber`. **Required when `connection-type` is `https`** — the run fails on input validation, before the Symitar host is contacted. | No       | -                                                    |
-| `connection-type`       | Connection type: `https` or `ssh`                                                                                 | No       | `ssh`                                                |
+| `symitar-app-port`      | Compatibility input, accepted but ignored in v2.2. Configure `ssh-port` instead. | No       | -                                                    |
+| `connection-type`       | Compatibility input, accepted but ignored in v2.2. Every value uses the Symitar connector over SSH. | No       | `ssh`                                                |
 | `local-directory-path`  | Local directory path containing files to synchronize                                                              | No       | Standard path for the selected directory type        |
 | `sync-mode`             | Synchronization mode: `push`, `pull`, or `mirror`                                                                 | Yes      | -                                                    |
-| `skip-validation`       | Skip PowerOn validation before a push or mirror. Only applies to `powerOns`. **Validation is not skipped by `dry-run`** — see the note below.                     | No       | `false`                                              |
+| `skip-validation`       | Skip PowerOn validation before a push or mirror. Only applies to `powerOns`. Dry runs skip validation; real installs still compile.                     | No       | `false`                                              |
+| `reinstall-dependent-powerons` | Reinstall listed parent PowerOns when their includes change. | No | `false` |
 | `sync-method`           | Transport method: `sftp` or `rsync`                                                                               | No       | `sftp`                                               |
 | `sftp-concurrency`      | Number of concurrent SFTP transfers. Only applies when `sync-method` is `sftp`                                    | No       | `4`                                                  |
 | `dry-run`               | Shows proposed changes without applying them                                                                      | No       | `true`                                               |
@@ -425,19 +421,13 @@ Leading `- ` markers are stripped and blank entries are dropped. `validate-power
 | `github-token`          | Token used to open the pull request. Needs `pull-requests: write`. Required whenever `create-pull-request` is `true`; the run fails before contacting Symitar if it is missing. | No       | `''`                                                 |
 | `debug`                 | Enable debug logging for Symitar clients                                                                          | No       | `false`                                              |
 
-> **`dry-run: true` does not make a `powerOns` run read-only.**
->
-> PowerOn validation runs *before* the dry-run short-circuit and is not gated by
-> it. On a `push` or `mirror` of `directory-type: powerOns`, each changed PowerOn
-> is uploaded into `REPWRITERSPECS` under a temporary name, compiled on the
-> Symitar host, and then removed — even when `dry-run` is `true`. If the run is
-> cancelled between the upload and the cleanup, the temporary file is left
-> behind.
->
-> A `powerOns` run touches nothing on the host only when one of these holds:
-> `sync-mode: pull` (pull never validates), or `skip-validation: true`. Other
-> directory types (`letterFiles`, `dataFiles`, `helpFiles`) never validate, so
-> `dry-run: true` alone is sufficient for them.
+`dry-run: true` plans changes without validation, transfer, installation, deletion, commits, or PR creation. It still connects, checks licensing, reads remote state, and compares checksums. A successful preview does not prove a real transfer or compilation will succeed.
+
+Synchronization compares and verifies original bytes, including same-size edits and line-ending changes. Failed mutations attempt rollback and verify it; an unsuccessful rollback reports an unknown destination state. Avoid concurrent writers during deployment, especially mirror operations.
+
+SFTP is the default. For `sync-method: rsync`, install `rsync` and `sshpass`; Windows also requires working WSL with Bash and `setsid`. `setsid` lets cancellation stop the transfer's process group before recovery. Dry runs use SFTP planning and do not test rsync execution.
+
+Set `reinstall-dependent-powerons: true` to install or reinstall listed parent PowerOns when a direct or nested include changes. Include complete source/include trees in the artifact. Dry runs explicitly name proposed parent reinstalls. The option defaults to `false`; `files-reinstalled` is a subset of `files-installed`, and dry-run counts describe planned actions, not completed installations.
 
 ### Outputs
 
@@ -446,13 +436,14 @@ Leading `- ` markers are stripped and blank entries are dropped. `validate-power
 | `files-deployed`    | Number of files deployed or pulled                                         |
 | `files-deleted`     | Number of files deleted                                                    |
 | `files-installed`   | Number of PowerOn files installed                                          |
+| `files-reinstalled` | Unchanged, previously installed parents reinstalled after an include change; included in files-installed. |
 | `files-uninstalled` | Number of PowerOn files uninstalled                                        |
 | `outliers-count`    | Number of server files that differ from local but are not preserve-matched |
 | `outlier-files`     | JSON array of outlier file names                                           |
 | `pull-request-id`   | Number of the pull request opened or reused by `create-pull-request`       |
 | `pull-request-url`  | Web URL of the pull request opened or reused by `create-pull-request`      |
 
-The six file-count outputs are published together whenever a synchronization
+The eight synchronization outputs are published together whenever a synchronization
 completes — every directory type, every sync mode, dry run or not. Directory
 types that cannot install, and pull runs, publish `0` for
 `files-installed`/`files-uninstalled` rather than omitting them, so a step
@@ -470,7 +461,7 @@ reused, as described under [Opening a Pull Request Instead of Committing](#openi
 
 The following secrets should be configured in your repository:
 
-- `SYMITAR_USER_PASSWORD` - Your Symitar Quest password
+- `SYMITAR_USER_PASSWORD` - Your Symitar password
 - `SSH_PASSWORD` - The AIX password for the Symitar host
 - `API_KEY` - Your PowerOn Pipelines API Key from [Libum Portal](https://portal.libum.io)
 
@@ -481,3 +472,17 @@ The following secrets should be configured in your repository:
 We at [Libum](https://libum.io) are committed to improving the software development process of Jack Henry™ credit unions. The best way for you to contribute is to share ways we can improve the Synchronize Symitar Action feature set.
 
 Please share your thoughts with us through our [Feedback Portal](https://feedback.libum.io), on our [Libum Community](https://discord.gg/libum) Discord, or at [development@libum.io](mailto:development@libum.io)
+
+### PowerOn Source Line Endings
+
+Prepare PowerOn source and includes with LF endings. The Symitar compiler may
+reject CRLF source, and v2.2 validates and synchronizes the saved bytes without
+normalizing them. For a repository whose PowerOn text lives in `REPWRITERSPECS`,
+use this `.gitattributes` rule:
+
+```gitattributes
+REPWRITERSPECS/** text eol=lf
+```
+
+Keep binary files out of this text rule and review any normalization changes
+before rollout.

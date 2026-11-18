@@ -14,7 +14,7 @@ inputs:
     description: 'The local directory path containing files to synchronize. If not specified, defaults to the standard path for the selected directory type (e.g., REPWRITERSPECS/ for PowerOns)'
     required: false
   connection-type:
-    description: 'The connection method to use (https or ssh). HTTPS is faster.'
+    description: 'Compatibility input; accepted but ignored in v2.2. The Symitar connector currently uses SSH regardless of this value.'
     required: false
     default: 'ssh'
   sync-mode:
@@ -28,26 +28,30 @@ inputs:
     description: 'The Symitar server hostname or IP address'
     required: true
   symitar-app-port:
-    description: 'The SymAppServer port (typically 42 + symNumber, e.g., 42627). Required when connection-type is https.'
+    description: 'Compatibility input; accepted but ignored in v2.2. Configure ssh-port for the current Symitar connector transport.'
     required: false
   ssh-username:
-    description: 'The AIX SSH username for the Symitar host'
+    description: 'AIX SSH credential required by the current Symitar connector regardless of legacy connection-type.'
     required: true
   ssh-password:
-    description: 'The AIX SSH password for the Symitar host'
+    description: 'AIX SSH credential required by the current Symitar connector regardless of legacy connection-type.'
     required: true
   ssh-port:
-    description: 'The SSH port for the Symitar server (only used when connection-type is ssh)'
+    description: 'The SSH port used by the Symitar connector'
     required: false
     default: '22'
+  ssh-host-key:
+    description: 'Approved SSH host public key base64 field. Otherwise the agent account must already trust the host in known_hosts with ssh-keygen available. Unknown or changed trust fails without prompting.'
+    required: false
+
   sym-number:
     description: 'The Symitar SYM number (e.g., 627)'
     required: true
   symitar-user-number:
-    description: 'The Symitar Quest user number'
+    description: 'The Symitar user number'
     required: true
   symitar-user-password:
-    description: 'The Symitar Quest user password'
+    description: 'The Symitar user password'
     required: true
   api-key:
     description: 'The PowerOn Pipelines API Key from the Libum Portal'
@@ -65,7 +69,7 @@ inputs:
     required: false
     default: ''
   pull-preserved-only:
-    description: 'When sync-mode is pull, only pull files matched by preserve-server-files. If no preserve-server-files are configured, this is a no-op.'
+    description: 'When sync-mode is pull, only pull files matched by preserve-server-files. If no preserve-server-files are configured, no files are pulled.'
     required: false
     default: 'false'
   commit-pulled-changes:
@@ -113,11 +117,11 @@ inputs:
     required: false
     default: ''
   skip-validation:
-    description: >-
-      Skip PowerOn validation before a push or mirror. Only applies to the powerOns directory type; pull never validates.
-      Note that validation is NOT skipped by dry-run: it uploads each changed PowerOn to REPWRITERSPECS under a temporary
-      name, compiles it on the host and removes it again, so a dry-run push of powerOns still writes to the Symitar host.
-      Set this to true when you need a push or mirror of powerOns that touches nothing on the host.
+    description: 'Skip pre-deployment PowerOn validation for push/mirror. Dry runs do not validate, transfer, install, delete, commit, or create PRs. Installation still compiles eligible PowerOns.'
+    required: false
+    default: 'false'
+  reinstall-dependent-powerons:
+    description: 'Opt in to reinstall listed PowerOn parents when a direct or nested include changes. Requires complete include trees in the artifact. Dry runs name affected parents; defaults to false.'
     required: false
     default: 'false'
   sync-method:
@@ -140,6 +144,8 @@ outputs:
     description: 'Number of files deleted'
   files-installed:
     description: 'Number of PowerOn files installed (only for powerOns directory type)'
+  files-reinstalled:
+    description: 'Number of unchanged, previously installed parents reinstalled because an include changed; included in files-installed.'
   files-uninstalled:
     description: 'Number of PowerOn files uninstalled (only for powerOns directory type)'
   outliers-count:

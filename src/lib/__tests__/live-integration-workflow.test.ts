@@ -1,130 +1,102 @@
 import { readFileSync } from 'fs';
 import * as path from 'path';
-
-import { load } from 'js-yaml';
-
-/**
- * Guards the safety invariants of `.github/workflows/live-integration.yml`.
- *
- * That workflow cannot be run from CI - it needs the self-hosted runner with
- * network access to SYM 627 - so the only thing standing between a plausible
- * edit and unattended writes to a live credit-union core is review. These tests
- * make the two load-bearing properties machine-checked instead.
- *
- * The important one is not `dry-run`. In `@libum-llc/symitar@1.12.0`,
- * `dist/shared/sync-orchestrator.js` computes
- *
- *     shouldValidate = hasPowerOnOptions
- *                   && syncMode !== PULL
- *                   && !options.powerOn?.skipValidation
- *
- * with **no `isDryRun` term**, and evaluates it *before* `operations.executeSync`
- * - which is where the dry-run short-circuit actually lives. PowerOn validation
- * uploads each changed file into REPWRITERSPECS under a temp name, compiles it
- * and unlinks it, so a dry-run push of `powerOns` writes to the host.
- * `hasPowerOnOptions` is false only because every scenario targets a directory
- * other than REPWRITERSPECS.
- */
-
-const WORKFLOW_PATH = path.join(
-  __dirname,
-  '..',
-  '..',
-  '..',
-  '.github',
-  'workflows',
-  'live-integration.yml',
+const { load } = require('js-yaml');
+const workflow = load(
+  readFileSync(
+    path.join(__dirname, '../../../.github/workflows/live-integration.yml'),
+    'utf8',
+  ),
 );
-
-interface WorkflowStep {
-  name?: string;
+const job = workflow.jobs.symitar;
+const steps = job.steps as Array<{
+  id?: string;
   uses?: string;
+  run?: string;
+  if?: string;
+  'continue-on-error'?: boolean;
   with?: Record<string, string>;
-}
+  env?: Record<string, string>;
+}>;
+const actions = steps.filter((step) => step.uses === './');
 
-const workflowSource = (): string => readFileSync(WORKFLOW_PATH, 'utf8');
-
-const actionSteps = (): WorkflowStep[] => {
-  const workflow = load(workflowSource()) as {
-    jobs: Record<string, { steps: WorkflowStep[]; if?: string }>;
-  };
-  const job = workflow.jobs['synchronize-symitar'];
-
-  return job.steps.filter((step) => step.uses === './');
-};
-
-/** Directory types whose remote directory is not REPWRITERSPECS. */
-const NON_POWERON_DIRECTORY_TYPES = ['letterFiles', 'dataFiles', 'helpFiles'];
-
-describe('live-integration workflow safety invariants', () => {
-  it('invokes the action at least once (guards against a vacuous suite)', () => {
-    expect(actionSteps().length).toBeGreaterThan(0);
-  });
-
-  it('runs every scenario as a dry run', () => {
-    for (const step of actionSteps()) {
-      expect([step.name, step.with?.['dry-run']]).toEqual([step.name, 'true']);
-    }
-  });
-
-  // The real guard. `dry-run: true` is necessary but NOT sufficient: PowerOn
-  // validation ignores it entirely. A `powerOns` scenario is only read-only if
-  // it also pulls (validation is skipped for PULL) or sets skip-validation.
-  it('never pushes or mirrors powerOns, because validation ignores dry-run', () => {
-    const offenders = actionSteps().filter((step) => {
-      const inputs = step.with ?? {};
-      if (NON_POWERON_DIRECTORY_TYPES.includes(inputs['directory-type'])) {
-        return false;
-      }
-      if (inputs['sync-mode'] === 'pull') return false;
-      if (inputs['skip-validation'] === 'true') return false;
-      return true;
-    });
-
-    expect(offenders.map((step) => step.name ?? '(unnamed step)')).toEqual([]);
-  });
-
-  it('declares every directory-type it uses as a known type', () => {
-    const known = [...NON_POWERON_DIRECTORY_TYPES, 'powerOns'];
-
-    for (const step of actionSteps()) {
-      expect(known).toContain(step.with?.['directory-type']);
-    }
-  });
-
-  // A fork's pull request must never reach the self-hosted runner. Checked here
-  // rather than only in review because the trigger is `pull_request` on a public
-  // repository.
-  it('keeps the fork guard and never uses pull_request_target as a trigger', () => {
-    const source = workflowSource();
-    const workflow = load(source) as {
-      on: Record<string, unknown>;
-      jobs: Record<string, { if?: string }>;
-    };
-
-    expect(workflow.jobs['synchronize-symitar'].if).toContain(
-      'github.event.pull_request.head.repo.full_name == github.repository',
+describe('live connector coverage and authentication safety', () => {
+  it('bounds credential-free preflight without selecting Windows WSL Bash', () => {
+    const preflight = job.steps.find(
+      (step: { run?: string }) =>
+        step.run === 'node scripts/integration/preflight.js',
     );
-    expect(Object.keys(workflow.on)).not.toContain('pull_request_target');
-
-    // Not a bare grep: the phrase legitimately appears in the security comment
-    // warning against it. Only non-comment lines count.
-    const nonCommentUses = source
-      .split('\n')
-      .filter(
-        (line) =>
-          line.includes('pull_request_target') && !line.trim().startsWith('#'),
-      );
-    expect(nonCommentUses).toEqual([]);
+    expect(preflight['timeout-minutes']).toBe(1);
+    expect(preflight.shell).toBeUndefined();
   });
-
-  it('never inlines a credential-shaped value', () => {
-    for (const step of actionSteps()) {
-      for (const [name, value] of Object.entries(step.with ?? {})) {
-        if (/password|api-key|token/.test(name)) {
-          expect(value).toMatch(/^\$\{\{\s*secrets\./);
-        }
-      }
+  it('runs on trusted branch pushes or dispatch, never fork/target PR events', () => {
+    expect(Object.keys(workflow.on).sort()).toEqual([
+      'push',
+      'workflow_dispatch',
+    ]);
+    expect(workflow.on.push['branches-ignore']).toContain('main');
+    expect(job.if).toContain('github.run_attempt == 1');
+    expect(job.strategy).toBeUndefined();
+    expect(workflow.concurrency['cancel-in-progress']).toBe(false);
+  });
+  it('tests the committed bundle through only the default connector', () => {
+    for (const step of actions) {
+      expect(step.with?.['ssh-host-key']).toBe(
+        '${{ vars.SYMITAR_SSH_HOST_KEY }}',
+      );
+      expect(step.with).not.toHaveProperty('connection-type');
+      expect(step.with).not.toHaveProperty('symitar-app-port');
+      expect(step.with?.['api-key']).toBe('poweron-pipelines-live-test-only');
+      expect(step.env?.NODE_OPTIONS).toBe(
+        '--require ./scripts/integration/preload-license.js',
+      );
+      for (const key of [
+        'ssh-password',
+        'symitar-user-password',
+        'symitar-hostname',
+        'ssh-username',
+        'sym-number',
+        'symitar-user-number',
+      ])
+        expect(step.with?.[key]).toMatch(/^\$\{\{ secrets\./);
     }
+    expect(steps.some((step) => step.run?.includes('pnpm build'))).toBe(false);
+  });
+  it('never runs a connecting step unconditionally after failure', () => {
+    for (const step of steps.filter(
+      (s) =>
+        s.uses === './' ||
+        /fixtures.js (check-absent|cleanup)/.test(s.run || ''),
+    )) {
+      expect(step.if).toBeUndefined();
+    }
+  });
+  it('retains preview, push, no-op, filtered pull, and byte transfer coverage', () => {
+    expect(actions.map((step) => step.id)).toEqual([
+      'preview',
+      'repeat_preview',
+      'push',
+      'noop',
+      'pull_nomatch',
+      'pull_preview',
+      'pull',
+    ]);
+    expect(actions.filter((step) => step['continue-on-error'])).toEqual([]);
+    expect(
+      actions
+        .filter((step) => step.with?.['dry-run'] === 'false')
+        .map((step) => step.id),
+    ).toEqual(['push', 'noop', 'pull']);
+    for (const step of actions) {
+      expect(step.with?.['directory-type']).toBe('helpFiles');
+      expect(step.with?.['sync-mode']).not.toBe('mirror');
+    }
+    expect(actions.at(-1)?.with?.['pull-preserved-only']).toBe('true');
+    expect(actions.at(-1)?.with?.['preserve-server-files']).toContain('\n');
+    expect(
+      steps.findIndex((step) => step.run?.endsWith('check-absent')),
+    ).toBeLessThan(steps.indexOf(actions[0]));
+    expect(
+      steps.findIndex((step) => step.run?.endsWith('verify-local')),
+    ).toBeLessThan(steps.findIndex((step) => step.run?.endsWith('cleanup')));
   });
 });
