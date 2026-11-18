@@ -77,12 +77,6 @@ jobs:
         run: pnpm install --frozen-lockfile
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NGUYENDON_GITHUB_TOKEN }}
-          GH_TOKEN: ${{ secrets.NGUYENDON_GITHUB_TOKEN }}
-          GIT_CONFIG_COUNT: '1'
-          GIT_CONFIG_KEY_0: credential.https://github.com.helper
-          GIT_CONFIG_VALUE_0: '!gh auth git-credential'
-          GIT_TERMINAL_PROMPT: '0'
-          GIT_SSH_COMMAND: 'false'
 
       - name: Prepare one run-owned binary HELPFILE and recovery journal
         id: fixtures
